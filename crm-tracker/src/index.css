@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface-2 font-sans text-sm text-ink antialiased;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+}
+
+/* numbers line up in tables and KPI cards */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-hero-600 bg-hero-600 text-white hover:bg-hero-700;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent shadow-none hover:bg-slate-200/60;
+  }
+  .btn-danger {
+    @apply border-bad bg-bad text-white hover:bg-bad-text;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
+  .card {
+    @apply rounded-lg border border-slate-200 bg-white shadow-card;
+  }
+  .input {
+    @apply rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:border-hero-600 focus:outline-none focus:ring-1 focus:ring-hero-600;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-ink-3;
+  }
+}
+
+/* Recharts: keep axis text in ink tokens, grid recessive */
+.recharts-cartesian-axis-tick-value {
+  fill: #52514e;
+  font-size: 11px;
+}
+.recharts-cartesian-grid line {
+  stroke: #e6e5e1;
+}
+.recharts-text.recharts-label {
+  fill: #52514e;
+}
+.recharts-surface:focus,
+.recharts-wrapper:focus {
+  outline: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

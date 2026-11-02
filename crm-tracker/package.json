@@ -1,0 +1,56 @@
+{
+  "name": "hero-crm-tracker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Hero Cycles CRM Tracker - static, browser-only analytics for Bizom SFA, Dealer App and DataSense SFA exports",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "snapshot": "vite-node scripts/make-snapshot.ts",
+    "build:single": "tsc --noEmit && vite build --mode single",
+    "build:html": "npm run snapshot && npm run build:single && node scripts/finish-html.mjs",
+    "extract": "vite-node scripts/extract-from-deployed.ts",
+    "build:vercel": "npm run extract && tsc --noEmit && vite build --mode vercel",
+    "typecheck:server": "tsc -p tsconfig.server.json",
+    "dev:server": "vite-node scripts/dev-server.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-table": "^8.20.5",
+    "@vercel/blob": "^2.8.2",
+    "@vercel/oidc": "3.8.10",
+    "clsx": "^2.1.1",
+    "exceljs": "^4.4.0",
+    "idb": "^8.0.0",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.460.0",
+    "papaparse": "^5.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.15.0",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "fake-indexeddb": "^6.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
