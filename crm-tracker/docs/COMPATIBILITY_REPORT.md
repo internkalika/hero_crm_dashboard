@@ -41,3 +41,23 @@ Branch `claude/gallant-davinci-tblebe`. No Vercel Blob code has been added. `mai
 8. `patch-oct2026/vercel/public/index.html` (a 6 MB duplicate of the deployed page, data included) is git-ignored.
 
 Reproduce: `tools/compat/README.md`.
+
+---
+
+# Stage 2: Usage Report as an importable dataset, sanitized fallback, publishing
+
+Re-run of the same comparison (deployed `index.html` vs the rebuilt single-file build, same browser, fresh storage each):
+
+| Check | Result |
+|---|---|
+| 11 dashboard pages (text, charts, tables, rows, buttons) | identical on all 11, including **Usage Report** and **Bizom SFA vs DataSense SFA Usage**, which now read from the imported `ds_usage` dataset instead of the embedded payload |
+| Only difference in page text | the new "Data Management" navigation entry (stripped for the comparison) |
+| Import page | one more dataset in the table (the Usage Report, 18 instead of 17) and nothing else |
+| Click-through of every non-destructive button on every page, same order on both builds | 414 compared: **382 identical**; the 32 that differ are all clicks on the column headers of the Import page's dataset table, which now sorts one more row |
+| Datasets: metadata of the 17 original datasets | identical |
+| Datasets: records | identical for 11 of 17. The other 6 differ **only** by the sanitizer: 10 loyalty `key`/`entityKey` pairs (a full mobile number replaced by a one-way token) and 1 complaint description (a mobile number replaced by `[removed]`). No dashboard figure changes |
+| Console / page errors | 0 in both |
+
+The Usage Report calculations were not touched; the pages' text that was specific to the old file ("April–October 2026", "3 order numbers appear on two rows…", "mostly archived") is produced from the dataset and reads identically for it. For a newly imported file these statements follow the file.
+
+New automated checks: 17 importer tests (`tests/dsusage.test.ts`), 12 sanitizer/validator/codec tests (`tests/publish.test.ts`), 18 backend tests (`tests/server.test.ts`: sign-in, cookie flags, CSRF, throttling, logout, multi-part publish, history, rollback, concurrent publishes, a failure while moving the pointer), 10 sync tests (`tests/sync.test.ts`) and a 37-check browser end-to-end run (`tools/compat/e2e_publish.cjs`).

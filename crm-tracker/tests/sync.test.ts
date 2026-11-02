@@ -17,7 +17,7 @@ import * as versionsH from '../server/handlers/versions.js';
 import * as snapshotH from '../server/handlers/snapshot.js';
 import * as datasetH from '../server/handlers/dataset.js';
 import { getDb, listMeta, loadPayload, removeDataset, resetDbHandle, saveDataset } from '../src/lib/store/db';
-import { adminLogin, adminRollback, adminVersions, fetchStatus } from '../src/lib/sync/api';
+import { adminLogin, adminRollback, adminVersions, fetchStatus, resetBackendProbe, syncEnabled } from '../src/lib/sync/api';
 import { discardLocalChange, previewPublish, publishLocal, syncPublished } from '../src/lib/sync/published';
 import { ensureBaseline, localChanges, markClean } from '../src/lib/sync/state';
 import type { DatasetMeta, DatasetPayload } from '../src/lib/types';
@@ -87,6 +87,7 @@ beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crm-sync-'));
   setContext({ cfg: { ...readConfig({ CRM_ADMIN_SECRET: ADMIN_SECRET, CRM_SESSION_SECRET: 's'.repeat(40), CRM_PUBLISH_PEPPER: 'p'.repeat(40) }) }, store: new FileStore(dir), now: () => Date.now() });
   resetAuthMemory();
+  resetBackendProbe();
   installFetch();
   await freshBrowser();
 });
@@ -200,6 +201,22 @@ describe('a viewer', () => {
     await saveDataset(usage([['a', 'Open']]));
     expect(await localChanges()).toEqual([]);
     expect(Object.keys((await ensureBaseline()).sigs).sort()).toEqual(['bizom_usage:2026-10', 'ds_usage:all']);
+  });
+});
+
+describe('hosts without a backend', () => {
+  it('asks a static host once, then stops asking', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => { calls++; return new Response('<html>spa</html>', { status: 200, headers: { 'content-type': 'text/html' } }); }) as typeof fetch;
+    expect(await fetchStatus()).toBeNull();
+    expect(syncEnabled()).toBe(false);
+    expect(await fetchStatus()).toBeNull();
+    expect(await syncPublished()).toMatchObject({ state: 'offline' });
+    expect(calls).toBe(1); // the host answered /api with its own page: no backend, no more requests
+    resetBackendProbe();
+    globalThis.fetch = (async () => { calls++; return new Response('nope', { status: 404 }); }) as typeof fetch;
+    expect(await fetchStatus()).toBeNull();
+    expect(syncEnabled()).toBe(false);
   });
 });
 

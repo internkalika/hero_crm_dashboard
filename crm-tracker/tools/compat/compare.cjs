@@ -3,7 +3,7 @@ const http = require('http'), fs = require('fs'), path = require('path'), crypto
 const ROOT = __dirname;
 const serve = (dir, port) => new Promise((r) => { const s = http.createServer((q, res) => { const f = path.join(dir, q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : 'application/octet-stream' }); res.end(fs.readFileSync(f)); }).listen(port, () => r(s)); });
 const ROUTES = ['/', '/overview', '/dealer/orders', '/dealer/complaints', '/hero-smiles', '/datasense/orders', '/datasense/complaints', '/datasense/employees', '/bizom/usage', '/compare/bizom-vs-sfa', '/issues', '/import'];
-const norm = (t) => t.replace(/\s+/g, ' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM|am|pm)?\b/g, '<time>').trim();
+const norm = (t) => t.replace(/\bData Management\b/g, '').replace(/\s+/g, ' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM|am|pm)?\b/g, '<time>').trim();
 async function grab(page, url, route) {
   await page.goto(url + '#' + route, { waitUntil: 'load' });
   await page.waitForFunction(() => document.querySelector('main, #root')?.innerText.length > 200, null, { timeout: 60000 }).catch(() => {});

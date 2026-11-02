@@ -8,6 +8,7 @@ import type { Crosswalk } from '../lib/metrics/comparison';
 import { IngestClient, createWorkerClient } from '../lib/ingest/client';
 import { seedIfFirstOpen, snapshotAppData } from '../lib/store/snapshot';
 import { SyncResult, syncPublished } from '../lib/sync/published';
+import { syncEnabled } from '../lib/sync/api';
 import { todayIso } from '../lib/util/parse';
 
 interface Ctx {
@@ -74,6 +75,7 @@ export function DataProvider({ children, clientFactory }: { children: ReactNode;
     try {
       if (version.current === 0) {
         await seedIfFirstOpen().catch(() => undefined);
+        // (the single-file HTML has no backend: syncPublished answers at once without a request)
         // bring in the published version before the first paint, but never hold the page up for long or fail because of it
         note(await Promise.race([syncPublished().catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), FIRST_SYNC_WAIT_MS))]));
       }
@@ -120,7 +122,7 @@ export function DataProvider({ children, clientFactory }: { children: ReactNode;
   useEffect(() => {
     if (typeof window === 'undefined' || window.location.protocol === 'file:') return;
     const tick = () => {
-      if (document.visibilityState === 'visible' && version.current > 0) void syncNow();
+      if (syncEnabled() && document.visibilityState === 'visible' && version.current > 0) void syncNow();
     };
     const id = window.setInterval(tick, POLL_MS);
     document.addEventListener('visibilitychange', tick);

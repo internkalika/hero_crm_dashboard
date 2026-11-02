@@ -32,11 +32,22 @@ async function call<T>(path: string, init: RequestInit = {}, admin = false): Pro
 }
 const post = <T,>(path: string, body: unknown, admin = true) => call<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, admin);
 
+/**
+ * The single-file HTML is meant to be shared as a file or from any static host: it never talks to a backend.
+ * Every other build does, so a host that turns out to have no API (404, or the page itself answering) is asked only once.
+ */
+export const syncEnabled = (): boolean => import.meta.env.MODE !== 'single' && !backendMissing;
+let backendMissing = false;
+export const resetBackendProbe = () => { backendMissing = false; };
+
 /** Public: which version is published. Resolves to null when the API cannot be reached (offline, no backend, a static copy). */
 export async function fetchStatus(): Promise<SnapshotStatus | null> {
+  if (!syncEnabled()) return null;
   try {
     const res = await fetch('/api/snapshot', { cache: 'no-cache', credentials: 'omit' });
-    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
+    const json = (res.headers.get('content-type') ?? '').includes('json');
+    if (res.status === 404 || res.status === 405 || (res.ok && !json)) backendMissing = true; // a static host, or a single-page fallback answering for /api
+    if (!res.ok || !json) return null;
     return (await res.json()) as SnapshotStatus;
   } catch {
     return null;

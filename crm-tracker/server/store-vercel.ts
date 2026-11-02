@@ -39,12 +39,12 @@ export class VercelBlobStore implements Store {
         ifMatch: opts.ifMatch,
         cacheControlMaxAge: 60,
       });
-      const h = await this.head(r.pathname);
-      return h ?? { etag: '', size: bytes.byteLength, uploadedAt: new Date().toISOString() };
+      return { etag: r.etag, size: bytes.byteLength, uploadedAt: new Date().toISOString() };
     } catch (e) {
       if (e instanceof BlobPreconditionFailedError) throw new PreconditionFailed();
-      // creating over an existing pathname without allowOverwrite is reported as a plain BlobError
-      if (e instanceof Error && /already exists/i.test(e.message)) throw new PreconditionFailed('The object already exists.');
+      // The SDK reports "this pathname is already taken" as a generic error whose class we cannot rely on, so do not read the
+      // message: if a create-only write failed, look whether the object is there now. If it is, somebody else created it first.
+      if (opts.ifNotExists && (await this.head(path).catch(() => null))) throw new PreconditionFailed('The object already exists.');
       throw e;
     }
   }

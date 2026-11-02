@@ -3,8 +3,10 @@
 *Bizom SFA | Dealer App | DataSense SFA* – an analytics web app for Hero Cycles that turns the monthly CRM MIS
 exports into dashboards and comparisons, with Excel/CSV downloads of the tables.
 
-* **Browser-only.** React + TypeScript + Vite. All parsing and calculation happens in your browser; the files are never
-  uploaded. No backend, no database server, no paid API.
+* **Browser-only by default.** React + TypeScript + Vite. All parsing and calculation happens in your browser; the files are never
+  uploaded. No backend, no database server, no paid API. *Optional:* on a Vercel deployment with a private Blob store, an administrator can
+  publish imported data for everyone (sanitized, versioned, with rollback): see `docs/PUBLISHING.md`. The single HTML file never talks to a
+  backend, and a host without the API is asked once and then left alone.
 * **Two ways to ship it.**
   * **`CRM_Tracker_Dashboard.html`** – one self-contained HTML file with the supplied MIS data already inside it.
     Double-click it and the dashboard opens; no server, no install, no internet. This is the file to hand to colleagues.

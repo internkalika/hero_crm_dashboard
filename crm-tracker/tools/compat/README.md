@@ -14,3 +14,8 @@ Needs Playwright (`require('playwright')`). Layout expected next to the scripts:
 | `compare2.cjs` | clicks every non-destructive button on every route in the same order on both builds and compares the page text each time; full-height screenshots |
 | `import_flow.cjs` | the 8-step import wizard with a new file, an identical re-upload (duplicate/hash) and a changed re-upload; IndexedDB after each |
 | `upgrade_assistant.cjs` | the "newer snapshot" upgrade path of a browser seeded by an older snapshot, and the "Ask the data" assistant |
+| `e2e_publish.cjs` | the whole publishing workflow against the real built app and API on a local server (a directory stands in for the Blob store): needs `npm run build:vercel` first; see `docs/PUBLISHING.md` |
+| `make-usage-fixtures.cjs` | writes the synthetic Usage Report workbooks that `e2e_publish.cjs` imports (`fixtures/usage/`) |
+
+Run the comparison scripts with the final single build (`vite build --mode single`) copied to `rebuilt/index.html`. The sidebar has one extra entry,
+"Data Management"; strip that label from both texts before comparing (the scripts here already do this).

@@ -4,7 +4,7 @@ const ROOT = __dirname;
 const serve = (dir, port) => new Promise((r) => { const s = http.createServer((q, res) => { const f = path.join(dir, 'index.html'); res.writeHead(200, { 'content-type': 'text/html' }); res.end(fs.readFileSync(f)); }).listen(port, () => r(s)); });
 const ROUTES = ['/', '/overview', '/dealer/orders', '/dealer/complaints', '/hero-smiles', '/datasense/orders', '/datasense/complaints', '/datasense/employees', '/bizom/usage', '/compare/bizom-vs-sfa', '/issues', '/import'];
 const SKIP = /^(remove|delete|clear|reset all|replace|merge|import|load|choose|browse|upload|download|ask the data|show all data)\b/i;
-const norm = (t) => t.replace(/\s+/g, ' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM|am|pm)?\b/g, '<time>').trim();
+const norm = (t) => t.replace(/\bData Management\b/g, '').replace(/\s+/g, ' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM|am|pm)?\b/g, '<time>').trim();
 async function run(browser, name, url) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 3600 } });
   const page = await ctx.newPage(); const errs = [];
