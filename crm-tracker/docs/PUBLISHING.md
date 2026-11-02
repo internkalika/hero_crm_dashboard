@@ -58,22 +58,79 @@ Other numeric cells are not scanned (an order value is not a phone number). The 
 
 **Limits to know.** Address-based throttling cannot stop a distributed attack: add a Vercel Firewall rate-limit rule for `/api/admin/login` (for example 10 per minute per IP) for a hard guarantee. A shared secret has no per-person audit trail: the history records *when* and the note, not *who*. Dataset blobs are never deleted automatically (history and rollback depend on them); remove old ones in the Blob dashboard if storage matters.
 
-## Setting it up on Vercel (a separate project, so production is untouched)
+## Setting it up on the existing Vercel project (`hero_crm_dashboard`), Preview only
 
-1. **New Vercel project** from this repository. *Root Directory*: `crm-tracker`. Leave *Include source files outside of the Root Directory* **on** (the build reads `../index.html`, the deployed single file, to build the embedded fallback). Framework preset Vite; `vercel.json` sets build and output.
-2. **Storage → Create → Blob**, access **Private**, connect it to the project (this adds `BLOB_READ_WRITE_TOKEN`). Use a different store for Preview and Production if you want them apart.
-3. **Environment variables** (Production and Preview):
+**How it is wired.** The project keeps its Root Directory (the repository root). Everything that makes this feature build lives in four
+files that exist **only on the feature branch** `claude/gallant-davinci-tblebe`; `main` has none of them, so Production keeps serving
+the single `index.html` exactly as before:
 
-| Variable | Value |
+| File (repository root) | Purpose |
 |---|---|
-| `CRM_ADMIN_SECRET` | the shared administrator secret, ≥ 16 characters (`openssl rand -base64 24`) |
-| `CRM_SESSION_SECRET` | ≥ 32 random characters (`openssl rand -base64 48`) |
-| `CRM_PUBLISH_PEPPER` | ≥ 32 random characters, different from the others, **keep it stable** (it makes the anonymous tokens repeatable) |
-| `CRM_BLOB_PREFIX` | optional, default `crm-tracker` |
-| `CRM_SESSION_HOURS` | optional, default 8 |
+| `vercel.json` | install / build / output commands (they take precedence over the dashboard fields), the nine functions' time limit, the single-page-app rewrite, security headers |
+| `package.json` | marks the `api/` shims as ES modules and pins Node 22; it has no dependencies (nothing is installed at the root) |
+| `api/**/*.ts` (9 files) | one-line shims that re-export the handlers in `crm-tracker/server/handlers/` (Vercel only finds functions in `api/` at the project root) |
+| `index.html` (already there) | the deployed single file: the build reads it to make the sanitized embedded fallback |
 
-4. Push the branch: Vercel builds a **preview** (`npm run build:vercel`). Open `/admin`: until the variables exist it says publishing is not set up; viewers are unaffected.
-5. Firewall rule for `/api/admin/login` (see above).
+**Vercel settings (Project → Settings).** Nothing in Build & Output has to be changed. For reference, what a Preview deployment of the branch uses:
+
+| Setting | Value on the branch's Preview |
+|---|---|
+| Root Directory | unchanged (repository root) |
+| Framework Preset | `Other` (`vercel.json` sets `"framework": null`) |
+| Install Command | `cd crm-tracker && npm ci` |
+| Build Command | `cd crm-tracker && npm run build:vercel` |
+| Output Directory | `crm-tracker/dist` |
+| Node.js Version | 22.x (the root `package.json` pins it; set Settings → General → Node.js Version to 22.x as well) |
+| Production Branch | `main`, unchanged |
+
+If a dashboard field shows an "Override" switch that is on, `vercel.json` still wins for the branch; the deployment's *Build Logs → Build Settings* summary shows what was used.
+
+**Environment variables (Settings → Environment Variables).** Add them for **Preview** only (optionally restricted to the branch `claude/gallant-davinci-tblebe`) and mark them *Sensitive*. They only take effect on the next deployment.
+
+| Name | Environment | Value |
+|---|---|---|
+| `BLOB_READ_WRITE_TOKEN` | Preview (Development optional) | created for you when the store is connected (below); never type it in by hand |
+| `CRM_ADMIN_SECRET` | Preview | the shared administrator secret, ≥ 16 characters (`openssl rand -base64 24`) |
+| `CRM_SESSION_SECRET` | Preview | ≥ 32 random characters (`openssl rand -base64 48`) |
+| `CRM_PUBLISH_PEPPER` | Preview | ≥ 32 random characters, different from the other two. **Never change it afterwards** (it keeps the anonymous tokens repeatable) |
+| `CRM_BLOB_PREFIX` | Preview, optional | default `crm-tracker` |
+| `CRM_SESSION_HOURS` | Preview, optional | default 8 (1–72) |
+
+Do **not** add them to Production yet: Production builds `main`, which does not contain this feature.
+
+**Blob store (Project → Storage).**
+1. **Create → Blob.** Name it (for example `hero-crm-publish-preview`).
+2. **Access: Private.** Choose it when creating; do not use a public store. The code only ever reads and writes with `access: 'private'` (enforced by `tests/store-vercel.test.ts` and `tests/deploy-config.test.ts`) and never exposes a store URL.
+3. Pick the region closest to the people who use the dashboard.
+4. **Connect to Project** `hero_crm_dashboard`, with environments **Preview** (and Development if you like), **not Production**.
+5. Check Settings → Environment Variables: `BLOB_READ_WRITE_TOKEN` is listed for Preview.
+Use a separate store (and token) for Production later.
+
+**Preview deployment.**
+1. Add the environment variables and the store, then push (or *Redeploy*) the branch. Vercel builds a Preview.
+2. In the build log look for `snapshot "…" 18 datasets (17 embedded + the Usage Report, 29679 orders) … sanitized: 20 keys made anonymous, 1 values removed`. That line proves the build read the root `index.html`. The build finishes in about 1–2 minutes.
+3. The Preview URL looks like `hero-crm-dashboard-git-claude-gallant-davinci-tblebe-<team>.vercel.app`.
+
+**What to verify on the Preview** (replace `$P` with the Preview URL; if Vercel Authentication protects previews, open the URLs in a browser where you are logged in to Vercel, or use a protection-bypass token):
+
+| Check | Expected |
+|---|---|
+| Deployment → Functions tab | nine functions: `/api/snapshot`, `/api/dataset`, `/api/admin/session`, `/api/admin/versions`, `/api/admin/login`, `/api/admin/logout`, `/api/admin/stage`, `/api/admin/publish`, `/api/admin/rollback` |
+| `GET $P/api/snapshot` | `{"configured":true,"version":null,"publishedAt":null}` (with the variables and the store in place; `"configured":false` before) |
+| `GET $P/api/admin/session` | `{"configured":true,"admin":false,"expiresAt":null}` |
+| `GET $P/api/admin/versions` (no cookie) | `401` |
+| `GET $P/api/dataset?sha=` + 64 zeros | `404` |
+| `GET $P/api/admin/login` | `405` |
+| `$P/`, `$P/overview`, `$P/datasense/employees`, `$P/admin` typed into the address bar | each loads the dashboard (single-page-app rewrite), no 404 |
+| `$P/admin` | "Publishing is not available here" is **not** shown; the sign-in form is |
+| Response headers on any page | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY` |
+| Sign in, import a Usage Report workbook, publish, open the Preview in a second browser | the second browser shows the new data within about a minute, without reloading |
+
+**If something is off.** `configured:false` after adding the variables: redeploy (variables apply to new deployments only) and check the names and the Preview scope. A function listed as missing or failing to start: open its *Runtime Logs*; the code logs only names and error classes, never secrets. Build fails reading `index.html`: the Output must be built from the repository root (the settings above), not from `crm-tracker`.
+
+**What merging this branch would do.** `vercel.json` would then apply to Production too (Production would build `crm-tracker` instead of serving `index.html`). Do that only deliberately, with the Production variables and a Production store in place and after the Preview has been tested. Until then nothing about Production changes. To undo the whole setup, delete the four root files above from the branch.
+
+**Alternative (not used here).** A project whose Root Directory is `crm-tracker` can use `crm-tracker/vercel.json` and `crm-tracker/api/` instead; it needs *Include source files outside of the Root Directory* turned on, and it changes Production's Root Directory, which would break a `main` that has no such folder.
 
 Local rehearsal without Vercel: `npm run build:vercel`, then `CRM_STORE_DIR=.local-store CRM_ADMIN_SECRET=… CRM_SESSION_SECRET=… CRM_PUBLISH_PEPPER=… npm run dev:server` (a directory plays the Blob store).
 
@@ -81,8 +138,8 @@ Local rehearsal without Vercel: `npm run build:vercel`, then `CRM_STORE_DIR=.loc
 
 | Check | Command |
 |---|---|
-| unit / integration (importer, sanitizer, server, sync): 164 tests | `npm test` |
-| server import graph valid for Node ESM (what Vercel runs) | `npm run typecheck:server` |
+| unit / integration (importer, sanitizer, server, sync, deployment config, private-store usage): 191 tests | `npm test` |
+| server and root API shims valid for Node ESM (what Vercel runs) | `npm run typecheck:server` |
 | browser end-to-end: wizard, review, publish, viewer refresh, history, rollback, concurrent publishes, fallback, login limits | `npm run build:vercel && node tools/compat/e2e_publish.cjs` |
 | deployed page vs rebuilt page | `tools/compat/README.md` |
 
