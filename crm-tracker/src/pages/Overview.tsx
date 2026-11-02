@@ -60,7 +60,7 @@ function InsightCard({ insight }: { insight: KeyInsight }) {
   return (
     <section className="card overflow-hidden" aria-label={insight.title}>
       <header className="flex items-center gap-2 border-b border-slate-100 bg-surface-2 px-4 py-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-hero-700 shadow-card" aria-hidden>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-hero-700 shadow-card" aria-hidden>
           <Icon size={16} />
         </span>
         <h3 className="text-sm font-semibold leading-tight">{insight.title}</h3>
@@ -109,7 +109,7 @@ function InsightCard({ insight }: { insight: KeyInsight }) {
 }
 
 export default function Overview() {
-  const { data: fullData, loading, period, settings, crosswalk, asOf, setPeriodId } = useData();
+  const { data: fullData, loading, period, settings, crosswalk, asOf, focusMonth } = useData();
   const nav = useNavigate();
   const cf = useCrossFilter();
   const { open: openProfile } = useDealerProfile();
@@ -270,7 +270,7 @@ export default function Overview() {
   ];
 
   const dealerClick = (path: string) => (key: string, label: string) => (isValidatedDealerKey(key) ? openProfile(key, 'overview') : goTo(pageLink(path, { dealer: [key, label] })));
-  const monthClick = (key: string) => setPeriodId(key);
+  const monthClick = (key: string) => focusMonth(key);
   const singleMonth = /^\d{4}-\d{2}$/.test(period.id) ? period.id : null;
 
   const downloadSummary = async () => {
@@ -404,7 +404,7 @@ export default function Overview() {
           title="Hero Smiles points"
           value={loy ? fInt(loy.latestTotals.current) : '—'}
           sub={loy ? (dealerKeys.length ? `balance on ${fDate(loy.latest.date)}` : `as of ${fDate(loy.latest.date)} · ${fInt(loy.latestTotals.positiveBalances)} dealers with a balance`) : undefined}
-          trend={loy?.points && loy.points.pct !== null ? { text: `${fPct(Math.abs(loy.points.pct))} since ${fDate(loy.previous?.date)}`, dir: loy.points.pct > 0.0005 ? 'up' : loy.points.pct < -0.0005 ? 'down' : 'flat' } : undefined}
+          trend={loy?.points && loy.points.pct !== null ? { text: `${fPct(Math.abs(loy.points.pct))} since previous snapshot`, dir: loy.points.pct > 0.0005 ? 'up' : loy.points.pct < -0.0005 ? 'down' : 'flat' } : undefined}
           unavailable={loy ? undefined : dealerKeys.length ? 'These dealers are not in the Hero Smiles file' : missing('Hero Smiles')}
           onClick={go(loy ? '/hero-smiles' : '/import')}
           hint="Opens Hero Smiles."
@@ -632,7 +632,7 @@ export default function Overview() {
                   <BarsChart layout="vertical" color="#eda100" seriesName="Current points" onSelect={() => goTo('/hero-smiles')} data={loy.series.map((x) => ({ key: x.date, label: shortDate(x.date), value: x.current }))} />
                 </ChartCard>
                 {loy.previous && loy.moverBars.length > 0 && (
-                  <ChartCard title={`Largest point changes since ${fDate(loy.previous.date)}`} subtitle="Biggest gains and falls among dealers present in both snapshots. Click a dealer for the profile." table={{ columns: [{ header: 'Dealer' }, { header: 'Change', format: 'int' }], rows: loy.moverBars.map((r) => [r.label, r.value]) }}>
+                  <ChartCard title="Largest point changes since the previous snapshot" subtitle="Biggest gains and falls among dealers present in both snapshots. Click a dealer for the profile." table={{ columns: [{ header: 'Dealer' }, { header: 'Change', format: 'int' }], rows: loy.moverBars.map((r) => [r.label, r.value]) }}>
                     <BarsChart seriesName="Change in points" onSelect={(key) => openProfile(key, 'loyalty')} data={loy.moverBars} />
                   </ChartCard>
                 )}

@@ -1,14 +1,15 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen, Upload, X, Clock } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen, Upload, X } from 'lucide-react';
 import clsx from 'clsx';
 import { NAV, crumbsFor } from './nav';
 import { useData } from '../state/DataContext';
 import { DealerProfile } from './DealerProfile';
 import { Assistant } from './Assistant';
 import { Notice } from './ui';
-import { fDate } from '../lib/export/format';
-import { monthEnd } from '../lib/util/parse';
+import { DateRangePicker } from './DateRangePicker';
+import { LastUpdated } from './LastUpdated';
+import { ThemeToggle } from './ThemeToggle';
 import logoUrl from '../assets/hero-cycles-logo.jpg?inline';
 
 const safeGet = (k: string): string | null => {
@@ -29,7 +30,7 @@ const safeSet = (k: string, v: string) => {
 function Logo() {
   return (
     /* the supplied logo file, unaltered; multiply removes its off-white box on the light panel */
-    <div className="flex h-10 shrink-0 items-center rounded-md bg-surface-2 px-2 sm:h-12">
+    <div className="logo-chip flex h-10 shrink-0 items-center rounded-md bg-surface-2 px-2 sm:h-12">
       <img src={logoUrl} alt="Hero Cycles" className="h-7 w-auto max-w-none shrink-0 mix-blend-multiply sm:h-9" />
     </div>
   );
@@ -44,52 +45,14 @@ function Title() {
   );
 }
 
-function PeriodControl() {
-  const { periods, period, setPeriodId, setCustomRange, months } = useData();
-  const [custom, setCustom] = useState(false);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const min = months[0] ? `${months[0]}-01` : undefined;
-  const max = months.length ? monthEnd(months[months.length - 1]) : undefined;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-1.5 text-xs text-ink-2">
-        <span className="hidden xl:inline">Reporting period</span>
-        <select
-          aria-label="Reporting period"
-          className="input py-1"
-          value={period.id.startsWith('custom') ? 'custom' : period.id}
-          disabled={months.length === 0}
-          onChange={(e) => {
-            if (e.target.value === 'custom') setCustom(true);
-            else {
-              setCustom(false);
-              setPeriodId(e.target.value);
-            }
-          }}
-        >
-          {periods
-            .filter((p) => !p.id.startsWith('custom'))
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          {months.length > 0 && <option value="custom">{period.id.startsWith('custom') ? `Custom: ${period.label}` : 'Custom range…'}</option>}
-        </select>
-      </label>
-      {custom && (
-        <span className="flex items-center gap-1 text-xs">
-          <input aria-label="From date" type="date" className="input py-1" min={min} max={max} value={from} onChange={(e) => setFrom(e.target.value)} />
-          –
-          <input aria-label="To date" type="date" className="input py-1" min={min} max={max} value={to} onChange={(e) => setTo(e.target.value)} />
-          <button className="btn btn-sm btn-primary" disabled={!from || !to || from > to} onClick={() => (setCustomRange(from, to), setCustom(false))}>
-            Apply
-          </button>
-        </span>
-      )}
-    </div>
-  );
+/** Pages whose figures follow the reporting range. The others (issue tracker, Hero Smiles balances, data tools) have no dated figures to narrow. */
+const RANGE_PAGES = new Set(['/', '/overview', '/dealer/orders', '/dealer/complaints', '/datasense/orders', '/datasense/complaints', '/datasense/employees', '/bizom/usage', '/compare/bizom-vs-sfa']);
+
+/** The one reporting-range control of the dashboard: a calendar limited to the dates the data covers. */
+function RangeControl() {
+  const { period, span, setCustomRange, setPeriodId } = useData();
+  const value = period.from && period.to ? { from: period.from, to: period.to } : null;
+  return <DateRangePicker min={span?.min ?? null} max={span?.max ?? null} value={value} onApply={setCustomRange} onReset={() => setPeriodId('all')} />;
 }
 
 /** Header shortcut to Data Import. */
@@ -122,7 +85,7 @@ function Sidebar({ collapsed, onToggle, mobileOpen, closeMobile }: { collapsed: 
   return (
     <>
       {mobileOpen && <div className="fixed inset-0 z-30 bg-ink/40 lg:hidden" onClick={closeMobile} />}
-      <nav aria-label="Main navigation" className={clsx('z-30 flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all', 'fixed inset-y-0 left-0 top-[110px] sm:top-16 lg:static', mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0', rail ? 'w-16' : 'w-72')}>
+      <nav aria-label="Main navigation" className={clsx('z-30 flex shrink-0 flex-col border-r border-slate-200 bg-surface transition-all', 'fixed inset-y-0 left-0 top-[110px] sm:top-16 lg:static', mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0', rail ? 'w-16' : 'w-72')}>
         <div className="flex-1 overflow-y-auto p-2">
           {NAV.map((g) => {
             const Icon = g.icon;
@@ -177,7 +140,7 @@ function Sidebar({ collapsed, onToggle, mobileOpen, closeMobile }: { collapsed: 
 }
 
 export function Layout(): ReactNode {
-  const { data, lastRefresh, loading, storageNote } = useData();
+  const { data, loading, storageNote } = useData();
   const loc = useLocation();
   const navigate = useNavigate();
   const canGoBack = loc.key !== 'default';
@@ -188,7 +151,7 @@ export function Layout(): ReactNode {
   const files = data.datasets.length;
   return (
     <div className="flex h-full flex-col">
-      <header className="no-print z-40 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 sm:min-h-16 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-x-3 sm:px-4 sm:py-0">
+      <header className="no-print z-40 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-slate-200 bg-surface px-3 py-2 sm:min-h-16 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-x-3 sm:px-4 sm:py-0">
         <div className="col-start-1 row-start-1 flex items-center gap-1 justify-self-start sm:gap-2">
           <button className="btn btn-ghost lg:hidden" aria-label="Open navigation" onClick={() => setMobile((m) => !m)}>
             {mobile ? <X size={20} /> : <Menu size={20} />}
@@ -201,14 +164,12 @@ export function Layout(): ReactNode {
         <Link to="/" aria-label="CRM Tracker home" className="col-start-2 row-start-1 min-w-0 justify-self-start rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
           <Title />
         </Link>
-        <div className="col-span-3 row-start-2 flex items-center gap-3 sm:col-span-1 sm:col-start-3 sm:row-start-1">
-          <div className="hidden items-center gap-1.5 whitespace-nowrap text-xs text-ink-2 xl:flex" aria-live="polite">
-            <Clock size={12} />
-            {loading && !files ? 'Loading…' : lastRefresh ? `Data updated ${fDate(lastRefresh.slice(0, 10))}` : 'No data imported'}
-          </div>
-          {loc.pathname !== '/' && <PeriodControl />}
+        <div className="col-span-3 row-start-2 flex flex-wrap items-center gap-x-4 gap-y-1 sm:col-span-1 sm:col-start-3 sm:row-start-1">
+          <LastUpdated />
+          {RANGE_PAGES.has(loc.pathname) && <RangeControl />}
         </div>
-        <div className="col-start-3 row-start-1 justify-self-end sm:col-start-4">
+        <div className="col-start-3 row-start-1 flex items-center gap-2 justify-self-end sm:col-start-4">
+          <ThemeToggle />
           <ImportButton />
         </div>
       </header>

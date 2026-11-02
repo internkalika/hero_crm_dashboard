@@ -133,7 +133,7 @@ export function DataTable<T>({ rows, columns, exportName, exportNotes = [], full
               <Columns3 size={16} />
             </button>
             {colMenu && (
-              <div role="menu" className="absolute right-0 z-30 mt-1 max-h-80 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-2 shadow-pop">
+              <div role="menu" className="absolute right-0 z-30 mt-1 max-h-80 w-56 overflow-auto rounded-md border border-slate-200 bg-surface p-2 shadow-pop">
                 {columns.map((c) => (
                   <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-50">
                     <input type="checkbox" checked={!hidden[c.id]} onChange={() => setHidden((h) => ({ ...h, [c.id]: !h[c.id] }))} />
@@ -148,7 +148,7 @@ export function DataTable<T>({ rows, columns, exportName, exportNotes = [], full
               <Download size={16} />
             </button>
             {expMenu && (
-              <div role="menu" className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-pop">
+              <div role="menu" className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-200 bg-surface p-1 text-xs shadow-pop">
                 <button role="menuitem" className="block w-full rounded px-2 py-1.5 text-left hover:bg-slate-50" onClick={() => doExport('xlsx', 'filtered')}>
                   Excel – current view ({total.toLocaleString('en-IN')} rows)
                 </button>
@@ -201,7 +201,7 @@ export function DataTable<T>({ rows, columns, exportName, exportNotes = [], full
                   onClick={onRowClick ? () => onRowClick(r.original) : undefined}
                   onKeyDown={onRowClick ? (e) => e.key === 'Enter' && onRowClick(r.original) : undefined}
                   tabIndex={onRowClick ? 0 : undefined}
-                  className={clsx('group/row border-b border-slate-100 last:border-0 odd:bg-white even:bg-slate-50', onRowClick && 'cursor-pointer hover:bg-hero-50 focus:bg-hero-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-hero-600', (Array.isArray(selectedId) ? selectedId.includes(id) : !!selectedId && selectedId === id) && '!bg-hero-50')}
+                  className={clsx('group/row border-b border-slate-100 last:border-0 odd:bg-surface even:bg-slate-50', onRowClick && 'cursor-pointer hover:bg-hero-50 focus:bg-hero-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-hero-600', (Array.isArray(selectedId) ? selectedId.includes(id) : !!selectedId && selectedId === id) && '!bg-hero-50')}
                 >
                   {r.getVisibleCells().map((cell, ci) => {
                     const c = cell.column.columnDef.meta as Col<T>;

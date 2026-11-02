@@ -122,7 +122,7 @@ export function MultiSelect({ field, selected, selectedLabels, onApply }: { fiel
         aria-label={`${field.label}: ${text}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={clsx('inline-flex h-7 max-w-[15rem] items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600', n > 0 ? 'border-hero-600 bg-hero-50 text-hero-700' : 'border-slate-300 bg-white text-ink-2 hover:border-slate-400')}
+        className={clsx('inline-flex h-7 max-w-[15rem] items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600', n > 0 ? 'border-hero-600 bg-hero-50 text-hero-700' : 'border-slate-300 bg-surface text-ink-2 hover:border-slate-400')}
         onClick={() => (open ? cancel() : start())}
       >
         <span className={clsx('truncate', n === 0 && 'font-medium')}>
@@ -136,7 +136,7 @@ export function MultiSelect({ field, selected, selectedLabels, onApply }: { fiel
         <div
           role="dialog"
           aria-label={`Filter ${field.label}`}
-          className={clsx('absolute top-full z-30 mt-1 w-80 max-w-[88vw] rounded-md border border-slate-200 bg-white p-2 shadow-pop', alignRight ? 'right-0' : 'left-0')}
+          className={clsx('absolute top-full z-30 mt-1 w-80 max-w-[88vw] rounded-md border border-slate-200 bg-surface p-2 shadow-pop', alignRight ? 'right-0' : 'left-0')}
           onKeyDown={(e) => {
             if (e.key === 'Escape') cancel();
           }}

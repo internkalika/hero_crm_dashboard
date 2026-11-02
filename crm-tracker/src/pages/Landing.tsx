@@ -7,7 +7,7 @@ import { PageHeader, InfoTip, Segmented } from '@/components/ui';
 import { DataGate } from '@/components/States';
 // Dealer App vs DataSense SFA: the landing page. All primitives (cards, charts, tables) come from the host app via __B().
 import {
-  Ctx, DealerRow, Filters, SIG, SigKey, T, View, agg, buildCtx, buildView, inr, inrFull, int, monthName, monthShort, pct, pctChange, sinr, sint, spct, takeaways,
+  Ctx, DateRange, DealerRow, Filters, SIG, SigKey, T, View, agg, buildCtx, buildView, inr, inrFull, int, monthName, monthShort, pct, pctChange, sinr, sint, spct, takeaways,
 } from '@/lib/metrics/landing';
 
 // The patch pages are written with plain createElement calls; props are checked at run time by the host components.
@@ -111,6 +111,14 @@ function Pair({ title, a, d, fmt, kind = 'num', foot, show, info, dfmt, onOpen }
     foot && h('div', { className: 'lp-pair-f' }, foot));
 }
 const fm1 = (n: number | null) => (n === null ? '—' : n.toFixed(1));
+/** pale pink for the earliest month in view up to Hero red for the latest, however many months there are */
+function shade(i: number, n: number): string {
+  const k = n <= 1 ? 1 : i / (n - 1);
+  const lo = [233, 163, 170];
+  const hi = [200, 32, 47];
+  return `rgb(${lo.map((c, j) => Math.round(c + (hi[j] - c) * k)).join(',')})`;
+}
+
 function barW(a: number, d: number): [number, number] {
   const m = Math.max(Math.abs(a), Math.abs(d), 1e-9);
   return [Math.max(2, (Math.abs(a) / m) * 100), Math.max(2, (Math.abs(d) / m) * 100)];
@@ -129,8 +137,8 @@ function KpiGrid({ v, onOpen }: { v: View; onOpen: (k: string) => void }) {
   const onlyApp = v.rows.filter((r) => r.app.valid > 0 && r.ds.valid === 0).length;
   const onlyDs = v.rows.filter((r) => r.app.valid === 0 && r.ds.valid > 0).length;
   const none = v.rows.length - onBoth - onlyApp - onlyDs;
-  const m1 = v.ctx.months[0];
-  const m2 = v.ctx.months[v.ctx.months.length - 1];
+  const m1 = v.cmp[0];
+  const m2 = v.cmp[1];
   const chg = (f: (x: any) => number, ch: 'app' | 'ds') => {
     const src = ch === 'app' ? v.appM : v.dsM;
     return { from: f(src[m1]), to: f(src[m2]) };
@@ -175,8 +183,8 @@ const SIGTONE: Record<string, string> = { good: 'good', warn: 'warn', bad: 'bad'
 
 function DealerTable({ v }: { v: View }) {
   const [sig, setSig] = useState<SigKey | ''>('');
-  const m1 = v.ctx.months[0];
-  const m2 = v.ctx.months[v.ctx.months.length - 1];
+  const m1 = v.cmp[0];
+  const m2 = v.cmp[1];
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     v.rows.forEach((r) => r.signals.forEach((s) => (c[s] = (c[s] ?? 0) + 1)));
@@ -227,8 +235,8 @@ function Trends({ v, onOpen }: { v: View; onOpen: (k: string) => void }) {
   const series = [...(sh.app ? [{ key: 'app', label: 'Dealer App', color: RED }] : []), ...(sh.ds ? [{ key: 'ds', label: 'DataSense SFA', color: BLUE }] : [])];
   const mk = (f: (a: any) => number | null) => v.trend.map((t) => ({ key: t.month, label: t.label, app: t.app ? f(t.app) : null, ds: t.ds ? f(t.ds) : null }));
   const caption = (f: (a: any) => number | null, rate = false) => {
-    const m1 = v.ctx.months[0];
-    const m2 = v.ctx.months[v.ctx.months.length - 1];
+    const m1 = v.cmp[0];
+    const m2 = v.cmp[1];
     const p1 = v.trend.find((t) => t.month === m1);
     const p2 = v.trend.find((t) => t.month === m2);
     if (!p1 || !p2 || m1 === m2) return null;
@@ -262,8 +270,8 @@ function Trends({ v, onOpen }: { v: View; onOpen: (k: string) => void }) {
 function Products({ v, part }: { v: View; part: 'visual' | 'tables' }) {
   const [mm, setMm] = useState('value');
   const [sm, setSm] = useState('qty');
-  const m1 = v.ctx.months[0];
-  const m2 = v.ctx.months[v.ctx.months.length - 1];
+  const m1 = v.cmp[0];
+  const m2 = v.cmp[1];
   const topModels = [...v.models].filter((m) => m.orders > 0).sort((a, b) => (b as any)[mm === 'orders' ? 'orders' : mm] - (a as any)[mm === 'orders' ? 'orders' : mm]).slice(0, 8).map((m) => ({ key: m.model, label: m.model, value: mm === 'orders' ? m.orders : mm === 'qty' ? m.qty : m.value }));
   const topSkus = [...v.skus].sort((a, b) => (b as any)[sm] - (a as any)[sm]).slice(0, 10).map((s) => ({ key: s.sku, label: s.sku, value: sm === 'qty' ? s.qty : s.value }));
   const dm = (x: any, m: string, k: string) => x.byMonth[m]?.[k] ?? 0;
@@ -306,7 +314,7 @@ function Products({ v, part }: { v: View; part: 'visual' | 'tables' }) {
         h('div', { className: 'lp-tabs' }, h(Segmented, { label: 'Rank SKUs by', value: sm, onChange: setSm, options: [{ value: 'qty', label: 'Quantity' }, { value: 'value', label: 'Order value' }] })),
         h(BarsChart, { data: topSkus, format: sm === 'qty' ? 'int' : 'inr', color: RED, seriesName: sm }))),
     h(ChartCard, { title: 'MBD by dealer', subtitle: 'Distinct models billed per dealer, by month.', table: { columns: [{ header: 'Dealer' }, ...v.ctx.months.map((m) => ({ header: monthShort(m), format: 'int' }))], rows: v.rows.map((r) => [r.name, ...v.ctx.months.map((m) => v.mbdDealer[r.key][m])]) } },
-      h(GroupedBarsChart, { data: v.rows.map((r) => ({ key: r.key, label: r.name, ...Object.fromEntries(v.ctx.months.map((m) => [m, v.mbdDealer[r.key][m]])) })), series: v.ctx.months.filter((m) => v.months.includes(m)).map((m, i) => ({ key: m, label: monthName(m), color: i === 0 ? '#e9a3aa' : RED })), format: 'int' }))
+      h(GroupedBarsChart, { data: v.rows.map((r) => ({ key: r.key, label: r.name, ...Object.fromEntries(v.ctx.months.map((m) => [m, v.mbdDealer[r.key][m]])) })), series: v.ctx.months.filter((m) => v.months.includes(m)).map((m, i) => ({ key: m, label: monthName(m), color: shade(i, v.months.length) })), format: 'int' }))
 );
 }
 
@@ -315,12 +323,11 @@ function Products({ v, part }: { v: View; part: 'visual' | 'tables' }) {
 function Definitions({ v }: { v: View }) {
   const c = v.ctx;
   const m1 = c.months[0];
-  const m2 = c.months[c.months.length - 1];
   const li = (a: string, b: string) => h('li', { key: a }, h('b', null, a + ': '), b);
   return h('div', { className: 'lp-def-b' },
       h('ul', null,
         li('Dealers', `The ${c.dealers.length} dealers that have Dealer App orders, matched to DataSense on the ERP dealer code (Dealer App Outlet ERP ID = the code in square brackets in the DataSense dealer name). Dealers that placed no order on a channel show 0, not a dash.`),
-        li('Dates', `Both channels use the same dates: ${c.wins[m1].label} (the Dealer App launched on ${+c.launch.slice(8)} ${monthShort(m1)}, so earlier days are not compared) and ${c.wins[m2].label} (the last day the Dealer App export reaches). No Dealer App figure exists or is shown before the launch.`),
+        li('Dates', `Both channels use the same dates, month by month: ${c.months.map((m) => c.wins[m].label).join(', ')} (the Dealer App launched on ${+c.launch.slice(8)} ${monthShort(m1)}, so earlier days are not compared, and the last window ends on the last day the Dealer App export reaches). No Dealer App figure exists or is shown before the launch. The reporting range chosen with the calendar narrows these windows.`),
         li('Submitted orders', 'Distinct orders of any status: Dealer App by Order ID (SKU lines rolled up), DataSense by Order NO. Footer total rows and exact duplicates are removed on import.'),
         li('Rejected orders', 'Dealer App status “Rejected”; DataSense “Rejected by ASM” and “Rejected by SAP”. Rejection rate = rejected ÷ submitted.'),
         li('Net valid orders', 'Submitted orders that are not rejected and have a value above zero. DataSense “SAP Order Not Created” orders are counted as valid, as on the DataSense Orders page, and noted on the card.'),
@@ -330,7 +337,7 @@ function Definitions({ v }: { v: View }) {
         li('Models and SKUs', 'Dealer App only: Sku_Brand is the model (MBD) and Sku the SKU. DataSense orders have no model or SKU. Billed = an invoice exists and the fulfilled quantity is above zero; an order alone is never read as billed.'),
         li('MBD', 'Models billed per dealer = distinct billed models ÷ dealers with a valid order in the month.'),
         li('Channel migration', 'An observed pattern on order value: Dealer App value up, DataSense value down by 0.5–2 times as much, combined within ±10%. It is not proof of causation.'),
-        li('Missing', 'DataSense has no model, SKU, fulfilled or billed quantity in the Order Punched Report. Dealer App complaints cover only 1–25 Oct. No cost data.')));
+        li('Missing', 'DataSense has no model, SKU, fulfilled or billed quantity in the Order Punched Report. Dealer App complaints cover only the dates in their export (see Data Management). No cost data.')));
 }
 
 
@@ -354,8 +361,8 @@ function Spark({ a, b, color }: { a: number; b: number; color: string }) {
 }
 
 function Movement({ v, onOpen }: { v: View; onOpen: (k: string) => void }) {
-  const m1 = v.ctx.months[0];
-  const m2 = v.ctx.months[v.ctx.months.length - 1];
+  const m1 = v.cmp[0];
+  const m2 = v.cmp[1];
   const sh = { app: v.show.app, ds: v.show.ds && v.dsAvailable };
   const defs: { id: string; l: string; f: (a: any) => number | null; fmt: (n: number | null) => string; low?: boolean; rate?: boolean }[] = [
     { id: 'm:valid', l: 'Valid orders', f: (a) => a.valid, fmt: int },
@@ -382,7 +389,7 @@ function Movement({ v, onOpen }: { v: View; onOpen: (k: string) => void }) {
         h('div', { className: 'top' }, h('span', { className: 'n' }, CH[ch].label), h('span', { className: 'val' }, d.fmt(b))),
         h('div', { className: 'bot' }, h(Spark, { a, b, color: tone }), h('span', { className: 'chg', style: { color: tone } }, flat ? '■ flat' : `${up ? '▲' : '▼'} ${txt}`))));
   };
-  if (!v.both) return h('div', { className: 'lp-note' }, 'Set Month to “Both” to see the September → October movement.');
+  if (!v.both) return h('div', { className: 'lp-note' }, 'Choose a range that covers at least two months to see the movement between the previous month and the latest.');
   return h('div', { className: 'lp-grid3' }, defs.map((d) => h('div', { key: d.l, className: 'lp-tk lp-click', ...clk(() => onOpen(d.id), d.l) },
     h('span', { className: 'lp-open', 'aria-hidden': true }, '↗'),
     h('div', { className: 'lp-tk-h' }, d.l, h('small', null, `${monthShort(m1)} → ${monthShort(m2)}`)),
@@ -451,8 +458,8 @@ function AdoptionPopup({ v }: { v: View }) {
   const none = N - onBoth - onlyApp - onlyDs;
   const share = v.app.valid + v.ds.valid > 0 ? v.app.valid / (v.app.valid + v.ds.valid) : null;
   const vshare = v.app.value + v.ds.value > 0 ? v.app.value / (v.app.value + v.ds.value) : null;
-  const m1 = v.ctx.months[0];
-  const m2 = v.ctx.months[v.ctx.months.length - 1];
+  const m1 = v.cmp[0];
+  const m2 = v.cmp[1];
   return h('div', null,
     h('div', { className: 'lp-tiles4' },
       h(Tile, { l: 'Dealer App adoption', v: `${v.app.active} of ${N}`, s: `Dealers with a valid app order · ${v.app.submitters} submitted${v.both ? ` · ${monthShort(m1)} ${v.appM[m1].active}, ${monthShort(m2)} ${v.appM[m2].active} active` : ''}` }),
@@ -476,15 +483,16 @@ function MbdPopup({ v }: { v: View }) {
 
 const NAVS: [string, string][] = [['lp-kpis', 'Core comparison'], ['lp-trends', 'Trends'], ['lp-products', 'Models (MBD)']];
 
-function Page({ data }: { data: any }) {
+function Page({ data, range }: { data: any; range: DateRange | null }) {
   const ctx = useMemo(() => buildCtx(data), [data.dealerLines, data.dsOrders]);
-  const [f, setF] = useState<Filters>({ month: 'both', dealers: [], channel: 'both', models: [] });
+  const [f, setF] = useState<Omit<Filters, 'range'>>({ dealers: [], channel: 'both', models: [] });
   const [modal, setModal] = useState('');
-  const view = useMemo(() => (ctx ? buildView(ctx, f) : null), [ctx, f]);
+  const view = useMemo(() => (ctx ? buildView(ctx, { ...f, range }) : null), [ctx, f, range]);
   if (!ctx || !view) return h('div', { className: 'lp-note' }, 'No Dealer App order data is loaded, so the 11-dealer comparison cannot be built. Import the Dealer App orders on the Data Import page.');
+  if (view.months.length === 0) return h('div', { className: 'lp' }, h(PageHeader, { title: 'Dealer App vs DataSense SFA' }), h('div', { className: 'lp-note' }, `No Dealer App orders fall in the chosen date range. The data covers ${ctx.launch} to ${ctx.cutoff}; choose dates inside it, or reset the range.`));
   const m1 = ctx.months[0];
   const m2 = ctx.months[ctx.months.length - 1];
-  const filtered = f.month !== 'both' || f.dealers.length > 0 || f.channel !== 'both' || f.models.length > 0;
+  const filtered = f.dealers.length > 0 || f.channel !== 'both' || f.models.length > 0;
   const close = () => setModal('');
   const title = modal === 'adoption' ? 'Dealer adoption and comparison' : modal === 'mbd' ? 'Models billed per dealer (MBD), ordered vs billed, rejections' : modal === 'models' ? 'Model (MBD) and SKU data' : modal.startsWith('m:') ? MEASURES[modal.slice(2)].title : '';
   return h('div', { className: 'lp' },
@@ -492,11 +500,10 @@ function Page({ data }: { data: any }) {
     h('div', { className: 'lp-scope' },
       h('span', { className: 'lp-chip red' }, `${ctx.dealers.length} common dealers`)),
     h('div', { className: 'lp-filters', role: 'group', 'aria-label': 'Filters' },
-      h(Seg, { label: 'Month', value: f.month, onChange: (x: any) => setF({ ...f, month: x }), options: [{ value: 'both', label: 'Both' }, ...ctx.months.map((m) => ({ value: m, label: monthName(m) }))] }),
       h(Pick, { label: 'Dealer', all: `All ${ctx.dealers.length} dealers`, value: f.dealers, onChange: (x: any) => setF({ ...f, dealers: x }), options: ctx.dealers.map((d) => ({ value: d.key, label: `${d.name} · ${d.key}` })) }),
       h(Seg, { label: 'Channel', value: f.channel, onChange: (x: any) => setF({ ...f, channel: x as any }), options: [{ value: 'both', label: 'Both' }, { value: 'app', label: 'Dealer App' }, { value: 'ds', label: 'DataSense' }] }),
       h(Pick, { label: 'Model (MBD)', all: 'All models', value: f.models, onChange: (x: any) => setF({ ...f, models: x }), options: ctx.models.map((m) => ({ value: m, label: m })) }),
-      filtered && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ month: 'both', dealers: [], channel: 'both', models: [] }) }, 'Reset filters')),
+      filtered && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ dealers: [], channel: 'both', models: [] }) }, 'Reset filters')),
     h('nav', { className: 'lp-nav', 'aria-label': 'Sections' }, NAVS.map(([id, l]) => h('button', { key: id, type: 'button', onClick: () => jump(id) }, l))),
     h(Section, { id: 'lp-kpis', title: 'Core comparison', sub: `Dealer App vs DataSense SFA · ${view.periodLabel} · ${view.dealerKeys.length} dealers` }, h(KpiGrid, { v: view, onOpen: setModal })),
     h(Section, { id: 'lp-trends', title: 'Trends', sub: `DataSense SFA ${monthShort(view.trend[0].month)}–${monthShort(m2)} for these dealers · Dealer App from its ${monthName(m1)} launch · ${monthShort(m1)} = ${ctx.wins[m1].label.split(' ')[1]} ${monthShort(m1)}, ${monthShort(m2)} = ${ctx.wins[m2].label.split(' ')[1]} ${monthShort(m2)}, as in the comparison above` }, h(Trends, { v: view, onOpen: setModal })),
@@ -506,6 +513,6 @@ function Page({ data }: { data: any }) {
 }
 
 export function LandingPage() {
-  const { data } = useData();
-  return h(DataGate, { any: ['dealer_orders', 'ds_orders'], what: 'the Dealer App vs DataSense SFA comparison' }, h(Page, { data }));
+  const { data, period } = useData();
+  return h(DataGate, { any: ['dealer_orders', 'ds_orders'], what: 'the Dealer App vs DataSense SFA comparison' }, h(Page, { data, range: period.from || period.to ? { from: period.from, to: period.to } : null }));
 }

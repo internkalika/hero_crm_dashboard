@@ -139,7 +139,7 @@ export function ComparisonTable({
                 onClick={() => onOpen(r)}
                 onKeyDown={(e) => e.key === 'Enter' && onOpen(r)}
                 aria-label={`Open dealer profile: ${r.dbName}`}
-                className="group/row cursor-pointer border-b border-slate-100 odd:bg-white even:bg-slate-50 hover:bg-hero-50 focus:bg-hero-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-hero-600"
+                className="group/row cursor-pointer border-b border-slate-100 odd:bg-surface even:bg-slate-50 hover:bg-hero-50 focus:bg-hero-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-hero-600"
               >
                 {COMPARISON_COLUMNS.map((c) => (
                   <td key={`${c.id}-${c.group}`} className={clsx('px-3 py-2', numeric(c) ? 'tnum text-right' : 'text-left', c.id === 'dbName' && 'font-medium text-ink group-hover/row:text-hero-700', CELL_TINT[c.group])}>

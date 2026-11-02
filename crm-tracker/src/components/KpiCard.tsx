@@ -125,7 +125,7 @@ export function KpiCard({ label, value, sub, info, tone = 'neutral', icon: Icon,
       <div ref={wrap} className="relative h-full [&>[role=button]]:h-full">
         {card}
         {menuOpen && (
-          <div role="menu" aria-label={`${label}: open`} className="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-pop">
+          <div role="menu" aria-label={`${label}: open`} className="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-slate-200 bg-surface p-1 text-sm shadow-pop">
             {menu.map((m) => (
               <button
                 key={m.label}

@@ -112,7 +112,7 @@ export default function HeroSmiles() {
         ],
       },
       ...(prev
-        ? [{ dim: 'move', label: `Change since ${fDate(prev.date)}`, allLabel: 'Any', options: [{ value: 'up', label: 'Points up', count: n((r) => (r.delta ?? 0) > 0) }, { value: 'down', label: 'Points down', count: n((r) => (r.delta ?? 0) < 0) }, { value: 'flat', label: 'No change', count: n((r) => r.delta === 0) }] } as FilterField]
+        ? [{ dim: 'move', label: 'Points movement', allLabel: 'Any', options: [{ value: 'up', label: 'Points up', count: n((r) => (r.delta ?? 0) > 0) }, { value: 'down', label: 'Points down', count: n((r) => (r.delta ?? 0) < 0) }, { value: 'flat', label: 'No change', count: n((r) => r.delta === 0) }] } as FilterField]
         : []),
       { dim: 'member', label: 'Member', allLabel: 'All members', search: true, options: buildOptions(rows, (r) => r.entityKey, { sort: 'label', noCounts: true, label: (_k, s) => `${titleCase((s.firmName || s.customerId || '').toLowerCase())}${s.customerId ? ` · ${s.customerId}` : ''}` }) },
     ];
@@ -214,7 +214,7 @@ export default function HeroSmiles() {
             <KpiCard label="Members with a balance" icon={Award} value={fInt(t.positiveBalances)} info={{ formula: 'Members whose current points are greater than 0 on the snapshot date' }} onClick={() => (cf.toggle('balance', 'positive', 'With a balance'), setTab('members'))} active={cf.has('balance', 'positive')} />
             <KpiCard label="Lifetime points" icon={TrendingUp} value={fInt(t.lifetime)} sub={`balance on ${fDate(snap.date)}`} info={{ formula: 'Σ lifetime points across members of THIS snapshot' }} />
             <KpiCard
-              label={prev ? `Change since ${fDate(prev.date)}` : 'Change since last snapshot'}
+              label="Change since previous snapshot"
               icon={Activity}
               value={prev ? `${lflDelta >= 0 ? '+' : '−'}${fInt(Math.abs(lflDelta))}` : '—'}
               unavailable={!prev ? 'Needs an earlier snapshot' : undefined}
@@ -246,7 +246,7 @@ export default function HeroSmiles() {
             <BarsChart seriesName="Current points" color="#eda100" onSelect={(key) => profile.open(key, 'loyalty')} data={topRows.map((r) => ({ key: r.entityKey, label: titleCase(r.firmName.toLowerCase()), value: r.current ?? 0 }))} />
           </ChartCard>
           {prev && moverBars.length > 0 && (
-            <ChartCard title={`Largest changes since ${fDate(prev.date)}`} subtitle="Gains in green, falls in red. Click a dealer to open the profile." table={{ columns: [{ header: 'Dealer' }, { header: 'Change', format: 'int' }], rows: moverBars.map((r) => [r.label, r.value]) }}>
+            <ChartCard title="Largest changes since the previous snapshot" subtitle="Gains in green, falls in red. Click a dealer to open the profile." table={{ columns: [{ header: 'Dealer' }, { header: 'Change', format: 'int' }], rows: moverBars.map((r) => [r.label, r.value]) }}>
               <BarsChart seriesName="Change in points" onSelect={(key) => profile.open(key, 'loyalty')} data={moverBars} />
             </ChartCard>
           )}
@@ -255,7 +255,7 @@ export default function HeroSmiles() {
 
       {tab === 'members' && <DataTable title={`Members on ${snap ? fDate(snap.date) : ''} (${fInt(filtered.length)})`} rows={filtered} columns={cols} getRowId={(r) => r.key} fullRows={data.loyalty as Row[]} exportName="HeroSmiles_members" exportNotes={exportNotes} initialSort={{ id: 'cur', desc: true }} onRowClick={openRow} selectedId={sel?.key} searchPlaceholder="Search dealers…" />}
 
-      {tab === 'changes' && prev && <DataTable title={`Change since ${fDate(prev.date)}`} rows={changes} columns={changeCols} getRowId={(c) => c.entityKey} exportName="HeroSmiles_changes" exportNotes={exportNotes} initialSort={{ id: 'd', desc: true }} onRowClick={(c) => profile.open(c.entityKey, 'loyalty')} pageSize={15} searchPlaceholder="Search dealers…" />}
+      {tab === 'changes' && prev && <DataTable title="Change since the previous snapshot" rows={changes} columns={changeCols} getRowId={(c) => c.entityKey} exportName="HeroSmiles_changes" exportNotes={exportNotes} initialSort={{ id: 'd', desc: true }} onRowClick={(c) => profile.open(c.entityKey, 'loyalty')} pageSize={15} searchPlaceholder="Search dealers…" />}
 
       {tab === 'snapshots' && <DataTable title="Snapshots" rows={totals} columns={snapCols} getRowId={(x) => x.date} exportName="HeroSmiles_snapshots" exportNotes={exportNotes} onRowClick={(x) => (setDate(x.date), setTab('overview'))} selectedId={snap?.date} pageSize={10} />}
 

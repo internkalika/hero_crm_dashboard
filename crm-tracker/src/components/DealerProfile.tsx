@@ -294,7 +294,7 @@ export function DealerProfile() {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onMouseDown={close} data-testid="dealer-profile">
       <aside role="dialog" aria-modal="true" aria-label={p ? `Dealer profile: ${p.identity.name}` : 'Dealer profile'} className="flex h-full w-full max-w-5xl flex-col bg-surface-2 shadow-pop" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-surface px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-hero-600 text-white" aria-hidden>
               <Building2 size={22} />

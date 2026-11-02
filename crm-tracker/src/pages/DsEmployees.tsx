@@ -23,7 +23,7 @@ const levelTone = { good: 'good', info: 'info', watch: 'warn', concern: 'bad' } 
 type TabId = 'overview' | 'employees';
 
 export default function DsEmployees() {
-  const { data, period, settings } = useData();
+  const { data, period, settings, focusMonth } = useData();
   const cf = useCrossFilter();
   const [tabRaw, setTab] = useUrlValue('tab', 'overview');
   const tab = (tabRaw === 'employees' ? 'employees' : 'overview') as TabId;
@@ -35,7 +35,6 @@ export default function DsEmployees() {
     const f = cf.filters;
     return sp.kept.filter((e) => {
       if (!cf.ok('role', (e.role || 'Not specified'))) return false;
-      if (!cf.ok('month', e.month)) return false;
       if (!cf.ok('employee', e.employeeKey)) return false;
       return true;
     });
@@ -45,7 +44,6 @@ export default function DsEmployees() {
   const filterFields: FilterField[] = useMemo(() => {
     const everyone = employeeRanking(sp.kept);
     return [
-      { dim: 'month', label: 'Month', allLabel: 'All months', options: buildOptions(sp.kept, (e) => e.month, { sort: 'value', label: (k) => monthKeyLabel(k) }) },
       { dim: 'role', label: 'Role', allLabel: 'All roles', options: buildOptions(sp.kept, (e) => e.role || 'Not specified') },
       { dim: 'employee', label: 'Employee', allLabel: 'All employees', search: true, options: buildOptions(sp.kept, (e) => e.employeeKey, { sort: 'label', noCounts: true, label: (_k, s) => titleCase(s.employee.toLowerCase()) }) },
       {
@@ -114,10 +112,10 @@ export default function DsEmployees() {
           <>
             <div className="grid gap-4 lg:grid-cols-2">
               <ChartCard title="Visits and orders by month" subtitle="Click a bar to filter." table={{ columns: [{ header: 'Month' }, { header: 'Employees', format: 'int' }, { header: 'Visits', format: 'int' }, { header: 'Orders', format: 'int' }], rows: monthly.map((m) => [m.label, m.employees, m.visits, m.orders]) }}>
-                <StackedBarsChart data={monthly.map((m) => ({ key: m.month, label: m.label, visits: m.visits, orders: m.orders }))} series={[{ key: 'visits', label: 'Visits', color: SERIES_COLOR.ds }, { key: 'orders', label: 'Orders', color: SERIES_COLOR.sfa }]} onSelect={(_s, key, lab) => cf.toggle('month', key, lab)} />
+                <StackedBarsChart data={monthly.map((m) => ({ key: m.month, label: m.label, visits: m.visits, orders: m.orders }))} series={[{ key: 'visits', label: 'Visits', color: SERIES_COLOR.ds }, { key: 'orders', label: 'Orders', color: SERIES_COLOR.sfa }]} onSelect={(_s, key, lab) => focusMonth(key)} />
               </ChartCard>
               <ChartCard title="Orders per visit by month" subtitle="Orders recorded for each visit recorded." table={{ columns: [{ header: 'Month' }, { header: 'Orders per visit', format: 'dec' }], rows: monthly.map((m) => [m.label, m.ordersPerVisit]) }}>
-                <TrendChart format="dec" data={monthly.map((m) => ({ key: m.month, label: m.label, opv: m.ordersPerVisit }))} series={[{ key: 'opv', label: 'Orders per visit', color: SERIES_COLOR.sfa }]} onSelect={(key, lab) => cf.toggle('month', key, lab)} />
+                <TrendChart format="dec" data={monthly.map((m) => ({ key: m.month, label: m.label, opv: m.ordersPerVisit }))} series={[{ key: 'opv', label: 'Orders per visit', color: SERIES_COLOR.sfa }]} onSelect={(key, lab) => focusMonth(key)} />
               </ChartCard>
               <ChartCard title="Top 10 employees by orders" subtitle="Click a bar to filter to that employee." table={{ columns: [{ header: 'Employee' }, { header: 'Orders', format: 'int' }, { header: 'Visits', format: 'int' }], rows: rows.slice(0, 10).map((r) => [titleCase(r.employee.toLowerCase()), r.orders, r.visits]) }}>
                 <BarsChart seriesName="Orders" activeKey={cf.filters.employee} onSelect={(key, lab) => cf.toggle('employee', key, lab)} data={rows.slice(0, 10).map((r) => ({ key: r.employeeKey, label: titleCase(r.employee.toLowerCase()), value: r.orders }))} />

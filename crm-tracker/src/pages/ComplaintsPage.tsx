@@ -25,7 +25,7 @@ type TabId = 'overview' | 'dealers' | 'register';
 const DIM_LABELS: Record<string, string> = { status: 'Status', month: 'Month raised', func: 'Responsible function', category: 'Category', sub: 'Sub-type', age: 'Ageing', who: 'Raised by', role: 'Role', dealer: 'Dealer', kpi: 'Measure' };
 
 function ComplaintsPage({ system }: { system: 'dealer' | 'ds' }) {
-  const { data, period, settings, asOf } = useData();
+  const { data, period, settings, asOf, focusMonth } = useData();
   const cf = useCrossFilter();
   const { open: openProfile } = useDealerProfile();
   const [tabRaw, setTab] = useUrlValue('tab', 'overview');
@@ -51,7 +51,6 @@ function ComplaintsPage({ system }: { system: 'dealer' | 'ds' }) {
     const f = cf.filters;
     return recs.filter((c) => {
       if (!cf.ok('status', c.statusGroup)) return false;
-      if (!cf.ok('month', c.month)) return false;
       if (!cf.ok('func', funcOf(c))) return false;
       if (!cf.ok('category', (c.category ?? 'Not specified'))) return false;
       if (!cf.ok('sub', (c.subType ?? 'Not specified'))) return false;
@@ -72,7 +71,6 @@ function ComplaintsPage({ system }: { system: 'dealer' | 'ds' }) {
     const notSpecified = (v: string | null | undefined) => v ?? 'Not specified';
     return [
       { dim: 'status', label: 'Status', allLabel: 'All statuses', options: buildOptions(recs, (c) => c.statusGroup, { label: (k) => COMPLAINT_STATUS_LABELS[k as ComplaintStatusGroup] ?? k }) },
-      { dim: 'month', label: 'Month raised', allLabel: 'All months', options: buildOptions(recs, (c) => c.month, { sort: 'value', label: (k) => monthKeyLabel(k) }) },
       { dim: 'func', label: isDealer ? 'Department' : 'Responsible function', allLabel: isDealer ? 'All departments' : 'All functions', search: true, options: buildOptions(recs, (c) => notSpecified(isDealer ? c.department : c.owner)) },
       { dim: 'category', label: 'Category', allLabel: 'All categories', search: true, options: buildOptions(recs, (c) => notSpecified(c.category)) },
       ...(isDealer
@@ -166,14 +164,14 @@ function ComplaintsPage({ system }: { system: 'dealer' | 'ds' }) {
             <ChartCard title="Complaints by status" subtitle="Click a status to filter." table={{ columns: [{ header: 'Status' }, { header: 'Complaints', format: 'int' }], rows: statusRows.map((r) => [r.label, r.count]) }}>
               <DonutChart centerValue={fInt(k.total)} centerLabel="complaints" activeKey={cf.filters.status} onSelect={(key, lab) => cf.toggle('status', key, lab)} data={statusRows.map((r, i) => ({ key: r.key, label: r.label, value: r.count, color: statusColor(r.label, i) }))} />
             </ChartCard>
-            <ChartCard title="Complaints raised by month" subtitle="Closed and not closed. Click a month to filter." table={{ columns: [{ header: 'Month' }, { header: 'Total', format: 'int' }, { header: 'Closed', format: 'int' }, { header: 'Not closed', format: 'int' }], rows: monthly.map((m) => [monthKeyLabel(m.month), m.total, m.closed, m.backlog]) }}>
+            <ChartCard title="Complaints raised by month" subtitle="Closed and not closed. Click a month to focus the reporting range on it." table={{ columns: [{ header: 'Month' }, { header: 'Total', format: 'int' }, { header: 'Closed', format: 'int' }, { header: 'Not closed', format: 'int' }], rows: monthly.map((m) => [monthKeyLabel(m.month), m.total, m.closed, m.backlog]) }}>
               <StackedBarsChart
                 data={monthly.map((m) => ({ key: m.month, label: monthKeyLabel(m.month), closed: m.closed, notClosed: m.total - m.closed }))}
                 series={[
                   { key: 'closed', label: 'Closed', color: '#1baf7a' },
                   { key: 'notClosed', label: 'Not closed (incl. rejected)', color: '#C8202F' },
                 ]}
-                onSelect={(_s, key, lab) => cf.toggle('month', key, lab)}
+                onSelect={(_s, key, lab) => focusMonth(key)}
               />
             </ChartCard>
             <ChartCard title="Ageing of complaints not yet closed" subtitle="Days since raised. Click a bar to filter." table={{ columns: [{ header: 'Age' }, { header: 'Complaints', format: 'int' }], rows: k.ageBuckets.map((b) => [b.label, b.count]) }}>

@@ -71,7 +71,7 @@ function ChartTooltip({ active, payload, label, format, unit }: { active?: boole
   if (!active || !payload?.length) return null;
   const title = (payload[0].payload?.label as string | undefined) ?? label;
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-pop">
+    <div className="rounded-md border border-slate-200 bg-surface px-3 py-2 text-xs shadow-pop">
       {title && <div className="mb-1 font-semibold text-ink">{title}</div>}
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2 text-ink-2">
@@ -112,7 +112,7 @@ export function ChartCard({ title, subtitle, info, children, table, className, n
           {lines.length > 0 && <InfoTip title={title} lines={lines} />}
         </h3>
         {table && (
-          <div className="inline-flex shrink-0 rounded-md border border-slate-300 bg-white p-0.5" role="group" aria-label="View as chart or table">
+          <div className="inline-flex shrink-0 rounded-md border border-slate-300 bg-surface p-0.5" role="group" aria-label="View as chart or table">
             <button aria-pressed={view === 'chart'} aria-label="Chart view" onClick={() => setView('chart')} className={clsx('rounded p-1', view === 'chart' ? 'bg-ink text-white' : 'text-ink-2 hover:bg-slate-100')}>
               <BarChart3 size={14} />
             </button>
@@ -326,7 +326,7 @@ export function HeatTable({ rowLabels, colLabels, values, format = 'int', rowHea
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr>
-            <th className="sticky left-0 bg-white px-2 py-1 text-left font-semibold text-ink-2">{rowHeader}</th>
+            <th className="sticky left-0 bg-surface px-2 py-1 text-left font-semibold text-ink-2">{rowHeader}</th>
             {colLabels.map((c) => (
               <th key={c} className="px-2 py-1 text-right font-semibold text-ink-2">
                 {c}
@@ -337,7 +337,7 @@ export function HeatTable({ rowLabels, colLabels, values, format = 'int', rowHea
         <tbody>
           {rowLabels.map((r, ri) => (
             <tr key={r}>
-              <td className="sticky left-0 max-w-[16rem] truncate bg-white px-2 py-1 text-ink" title={r}>
+              <td className="sticky left-0 max-w-[16rem] truncate bg-surface px-2 py-1 text-ink" title={r}>
                 {r}
               </td>
               {values[ri].map((v, ci) => {
@@ -588,7 +588,7 @@ export function ScatterPlot({
                 const p = active ? (payload?.[0]?.payload as ScatterPoint | undefined) : undefined;
                 if (!p) return null;
                 return (
-                  <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-pop">
+                  <div className="rounded-md border border-slate-200 bg-surface px-3 py-2 text-xs shadow-pop">
                     <div className="mb-1 font-semibold text-ink">{p.label}</div>
                     {(p.tip ?? [`${xTitle}: ${formatCompactByFormat(p.x, xFormat)}`, `${yTitle}: ${formatCompactByFormat(p.y, yFormat)}`]).map((t, i) => (
                       <div key={i} className="text-ink-2">{t}</div>
@@ -654,7 +654,7 @@ export function BridgeChart({ steps, format = 'inr', height = 250, onSelect }: {
             content={({ active, payload }) => {
               const d = active ? (payload?.[0]?.payload as (typeof data)[number] | undefined) : undefined;
               return d ? (
-                <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-pop">
+                <div className="rounded-md border border-slate-200 bg-surface px-3 py-2 text-xs shadow-pop">
                   <div className="mb-0.5 flex items-center gap-2 font-semibold text-ink">
                     <span className="h-2.5 w-2.5 rounded-sm" style={{ background: d.color }} aria-hidden />
                     {d.label}

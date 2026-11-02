@@ -91,3 +91,26 @@ export function customPeriod(from: string, to: string): Period {
 export function periodLabelShort(p: Period): string {
   return p.id === 'all' ? 'all available data' : p.label;
 }
+
+/**
+ * The first and last day the loaded data can speak for: exact dates of dated records, and whole months for the sources that only
+ * carry a month. null when nothing dated is loaded. The calendar offers no day outside it.
+ */
+export function availableSpan(data: AppData): { min: string; max: string } | null {
+  let min: string | null = null;
+  let max: string | null = null;
+  const see = (d: string | null | undefined) => {
+    if (!d || !/^\d{4}-\d{2}-\d{2}/.test(d)) return;
+    const x = d.slice(0, 10);
+    if (!min || x < min) min = x;
+    if (!max || x > max) max = x;
+  };
+  data.dealerLines.forEach((l) => see(l.orderDate));
+  data.dsOrders.forEach((o) => see(o.orderDate));
+  data.dealerComplaints.forEach((c) => see(c.raisedDate));
+  data.dsComplaints.forEach((c) => see(c.raisedDate));
+  data.usage.forEach((u) => (see(`${u.month}-01`), see(monthEnd(u.month))));
+  data.dsEmployees.forEach((e) => (see(`${e.month}-01`), see(monthEnd(e.month))));
+  data.dealerSfa.forEach((e) => (see(`${e.month}-01`), see(monthEnd(e.month))));
+  return min && max ? { min, max } : null;
+}

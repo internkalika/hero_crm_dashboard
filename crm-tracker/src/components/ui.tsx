@@ -87,7 +87,7 @@ export function InfoTip({ title, lines, className }: { title?: string; lines: Ar
         <HelpCircle size={14} />
       </button>
       {open && (
-        <span id={id} role="tooltip" className="absolute left-1/2 top-full z-40 mt-1.5 w-72 -translate-x-1/2 rounded-md border border-slate-200 bg-white p-3 text-left text-xs font-normal normal-case tracking-normal text-ink shadow-pop">
+        <span id={id} role="tooltip" className="absolute left-1/2 top-full z-40 mt-1.5 w-72 -translate-x-1/2 rounded-md border border-slate-200 bg-surface p-3 text-left text-xs font-normal normal-case tracking-normal text-ink shadow-pop">
           {title && <span className="mb-1 block font-semibold">{title}</span>}
           {lines.map((l, i) => (
             <span key={i} className="mb-1 block last:mb-0">
@@ -121,7 +121,7 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border border-slate-300 bg-white p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border border-slate-300 bg-surface p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
@@ -147,7 +147,7 @@ export function Modal({ open, onClose, title, children, footer, width = 'max-w-l
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={title} className={clsx('w-full rounded-lg bg-white shadow-pop', width)} onMouseDown={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={clsx('w-full rounded-lg bg-surface shadow-pop', width)} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h2 className="text-base font-semibold">{title}</h2>
           <button aria-label="Close" className="btn btn-ghost btn-sm" onClick={onClose}>

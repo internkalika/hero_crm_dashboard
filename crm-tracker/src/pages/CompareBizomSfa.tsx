@@ -17,7 +17,7 @@ import { monthLabel } from '../lib/util/parse';
 import { periodNote } from './common';
 
 export default function CompareBizomSfa() {
-  const { data, period, settings, setPeriodId } = useData();
+  const { data, period, settings, focusMonth } = useData();
   const nav = useNavigate();
   const cf = useCrossFilter();
   const usageAll = useMemo(() => splitTest(filterUsage(data.usage, period), settings.includeTestAccounts).kept, [data.usage, period, settings.includeTestAccounts]);
@@ -59,7 +59,7 @@ export default function CompareBizomSfa() {
   const monthsText = cmp.months.length ? cmp.months.map(monthLabel).join(' and ') : periodNote(period);
 
   const monthRows = cmp.monthly.map((m) => ({ ...m, fieldUsers: fieldUsersByMonth.get(m.month)?.size ?? 0 }));
-  const focusMonth = (key: string) => setPeriodId(key);
+  
 
   return (
     <DataGate need={['bizom_usage']} what="the Bizom SFA vs Dealer SFA usage comparison">

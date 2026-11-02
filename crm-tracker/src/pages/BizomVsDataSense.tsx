@@ -5,6 +5,7 @@ import { useDealerProfile } from '@/components/filters';
 import { DataTable } from '@/components/DataTable';
 import { PageHeader, InfoTip, Segmented } from '@/components/ui';
 import { DataGate } from '@/components/States';
+import { monthInPeriod } from '@/lib/metrics/period';
 // Bizom SFA vs DataSense SFA usage: Bizom MIS report usage (accesses) against the DataSense Usage Report (orders recorded).
 // The two measure different things (report accesses vs orders), so they are never added or divided by each other;
 // they are compared on people, zones and months both cover.
@@ -34,10 +35,12 @@ function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
     const a = new Set(bz.map((r) => r.month));
     return [...new Set(ds.map((r) => r.month))].filter((m) => a.has(m)).sort();
   }, [bz, ds]);
-  const [f, setF] = useState({ month: 'all', zones: [] as string[], kinds: [] as string[] });
+  const [f, setF] = useState({ zones: [] as string[], kinds: [] as string[] });
   const [modal, setModal] = useState('');
   const kinds = useMemo(() => [...new Set<string>(bz.map((r) => r.accountKind))].sort(), [bz]);
-  const sel = f.month === 'all' ? months : [f.month];
+  const { period } = useData();
+  // both sources are monthly figures: a month is in view when it overlaps the reporting range
+  const sel = useMemo(() => months.filter((m) => monthInPeriod(m, period)), [months, period]);
   const okZ = (z: string) => !f.zones.length || f.zones.includes(z);
   const bzF = (m: string[]) => bz.filter((r) => m.includes(r.month) && okZ(zn(r.zone)) && (!f.kinds.length || f.kinds.includes(r.accountKind)));
   const dsF = (m: string[]) => ds.filter((r) => m.includes(r.month) && okZ(zn(r.zone)));
@@ -54,7 +57,7 @@ function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
     const sfa = d.filter((r) => r.source === 'SFA').length;
     return { bu, de, acc, reports, orders, sfa, bUsers: bu.size, dEmps: de.size };
   };
-  const tot = useMemo(() => stat(sel), [bz, ds, f]);
+  const tot = useMemo(() => stat(sel), [bz, ds, f, sel]);
   const byM = useMemo(() => months.map((m) => ({ m, ...stat([m]) })), [bz, ds, f]);
   // people in both systems (matched on the person's name)
   const dsByName = new Map<string, any>();
@@ -72,7 +75,7 @@ function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
   const mdata = (fn: (x: any) => number) => byM.map((x) => ({ key: x.m, label: mlab(x.m), v: fn(x) }));
   const people = byM.map((x) => ({ key: x.m, label: mlab(x.m), bizom: x.bUsers, ds: x.dEmps }));
   const per = (a: number, b: number) => (b > 0 ? (a / b).toFixed(1) : '—');
-  const filtered = f.month !== 'all' || f.zones.length > 0 || f.kinds.length > 0;
+  const filtered = f.zones.length > 0 || f.kinds.length > 0;
   const kpi = (title: string, bv: any, dv: any, sub: string, open?: () => void) => h('div', { className: `lp-pair${open ? ' lp-click' : ''}`, ...clk(open, title) },
     open && h('span', { className: 'lp-open', 'aria-hidden': true }, '↗'),
     h('div', { className: 'lp-pair-h' }, h('span', null, title)),
@@ -104,14 +107,14 @@ function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
   return h('div', { className: 'lp' },
     h(PageHeader, { title: 'Bizom SFA vs DataSense SFA Usage' }),
     h('div', { className: 'lp-scope' },
-      h('span', { className: 'lp-chip red' }, `Months in both: ${months.map(mlab).join(', ')} 2026`),
+      h('span', { className: 'lp-chip red' }, `Months in both: ${months.map((m) => `${mlab(m)} ${m.slice(0, 4)}`).join(', ')}`),
       h('span', { className: 'lp-chip' }, 'Bizom SFA: MIS report usage (accesses)'),
       h('span', { className: 'lp-chip' }, 'DataSense SFA: Usage Report (orders recorded)')),
+    sel.length === 0 && h('div', { className: 'lp-note' }, 'No month covered by both Bizom SFA and DataSense SFA falls inside the chosen date range, so there is nothing to compare. Widen the range or reset it.'),
     h('div', { className: 'lp-filters' },
-      h(Seg, { label: 'Month', value: f.month, onChange: (x: string) => setF({ ...f, month: x }), options: [{ value: 'all', label: 'All' }, ...months.map((m) => ({ value: m, label: mlab(m) }))] }),
       h(Pick, { label: 'Zone', all: 'All zones', value: f.zones, onChange: (x: string[]) => setF({ ...f, zones: x }), options: [...ZONES, 'Other'].map((z) => ({ value: z, label: z })) }),
       h(Pick, { label: 'Bizom account type', all: 'All account types', value: f.kinds, onChange: (x: string[]) => setF({ ...f, kinds: x }), options: kinds.map((k) => ({ value: k, label: k })) }),
-      filtered && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ month: 'all', zones: [], kinds: [] }) }, 'Reset filters')),
+      filtered && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ zones: [], kinds: [] }) }, 'Reset filters')),
     h(Section, { id: 'bz-k', title: 'Side by side', sub: 'Report accesses and orders are different measures: they are shown next to each other, never added or divided.' },
       h('div', { className: 'lp-grid4' },
         kpi('Active people', int(tot.bUsers), int(tot.dEmps), 'Bizom: users with a report access · DataSense: employees who punched an order', () => setModal('zones')),
