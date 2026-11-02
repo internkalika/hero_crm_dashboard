@@ -7,7 +7,7 @@
 import crypto from 'node:crypto';
 import { HttpError, clientIp } from './http.js';
 import { PreconditionFailed } from './store.js';
-import { adminProblems, paths, type Context } from './config.js';
+import { adminProblems, blobProblems, paths, type Context } from './config.js';
 
 export const COOKIE = 'crm_admin';
 export const CSRF_HEADER = 'x-crm-admin';
@@ -91,7 +91,7 @@ export function assertSameOrigin(request: Request) {
 export function assertAdminConfigured(ctx: Context) {
   const problems = adminProblems(ctx.cfg);
   if (problems.length || !ctx.store) {
-    console.warn('[crm-api] publishing is not configured; missing:', [...problems, ...(ctx.store ? [] : ['BLOB_READ_WRITE_TOKEN'])].join('; ')); // names only, in the server log
+    console.warn('[crm-api] publishing is not configured; missing:', [...problems, ...(ctx.store ? [] : blobProblems(ctx.cfg))].join('; ')); // names only, in the server log
     throw new HttpError(503, 'not_configured', 'Publishing is not set up on this deployment.');
   }
 }

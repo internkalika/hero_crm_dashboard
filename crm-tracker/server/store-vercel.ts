@@ -1,4 +1,6 @@
-// The production store: a PRIVATE Vercel Blob store, reached with the server-side BLOB_READ_WRITE_TOKEN only.
+// A PRIVATE Vercel Blob store, reached with the server-side read-write token handed in by config.ts (the CRM_PREVIEW_… one on
+// Preview). Every call passes that token explicitly: with an explicit token the SDK uses it, and the store id inside it, and
+// never looks at the project's BLOB_READ_WRITE_TOKEN / BLOB_STORE_ID / OIDC settings.
 import { BlobNotFoundError, BlobPreconditionFailedError, del, get, head, list, put } from '@vercel/blob';
 import { PreconditionFailed, type PutOptions, type Store, type StoredObject } from './store.js';
 
@@ -6,7 +8,9 @@ const meta = (b: { etag: string; size: number; uploadedAt: Date }): StoredObject
 
 export class VercelBlobStore implements Store {
   readonly kind = 'vercel-blob' as const;
-  constructor(private readonly token?: string) {}
+  constructor(private readonly token: string) {
+    if (!token) throw new Error('A Blob read-write token is required: refusing to fall back to the environment.');
+  }
 
   async head(path: string) {
     try {

@@ -77,7 +77,7 @@ async function importFile(p, file, mode) {
     // ------------------------------------------------------------- the built app never contains a secret
     const assets = fs.readdirSync(path.join(ROOT, 'dist/assets')).filter((f) => f.endsWith('.js'));
     const bundle = assets.map((f) => fs.readFileSync(path.join(ROOT, 'dist/assets', f), 'utf8')).join('\n') + fs.readFileSync(path.join(ROOT, 'dist/index.html'), 'utf8');
-    check('front-end bundle contains neither the admin secret, nor the token names, nor the pepper', !bundle.includes(SECRET) && !/BLOB_READ_WRITE_TOKEN|CRM_ADMIN_SECRET_VALUE|vercel_blob_rw_/.test(bundle) && !bundle.includes('p'.repeat(48)));
+    check('front-end bundle contains neither the admin secret, nor the token names, nor the pepper', !bundle.includes(SECRET) && !/BLOB_READ_WRITE_TOKEN|CRM_PREVIEW_READ_WRITE_TOKEN|CRM_ADMIN_SECRET_VALUE|vercel_blob_rw_/.test(bundle) && !bundle.includes('p'.repeat(48)));
     const rawLeak = /917002533087|916301773040|919550387445/.test(bundle);
     check('the embedded fallback no longer carries the Hero Smiles mobile numbers', !rawLeak);
 

@@ -16,6 +16,47 @@ const bytes = new Uint8Array([1, 2, 3]);
 
 beforeEach(() => Object.values({ put: m.put, get: m.get, head: m.head, list: m.list, del: m.del }).forEach((f) => f.mockReset()));
 
+describe('VercelBlobStore and the environment', () => {
+  it('refuses to be built without a token, instead of letting the SDK read the environment', () => {
+    expect(() => new VercelBlobStore('')).toThrow(/refusing to fall back/);
+    expect(() => new VercelBlobStore(undefined as unknown as string)).toThrow();
+  });
+  it('every SDK call carries the Preview token, whatever production credentials sit in the environment', async () => {
+    const before = { t: process.env.BLOB_READ_WRITE_TOKEN, s: process.env.BLOB_STORE_ID, o: process.env.VERCEL_OIDC_TOKEN };
+    process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_prodstore_prodsecret';
+    process.env.BLOB_STORE_ID = 'store_prodstore';
+    process.env.VERCEL_OIDC_TOKEN = 'oidc-prod';
+    try {
+      const preview = new VercelBlobStore('vercel_blob_rw_previewstore_previewsecret');
+      m.put.mockResolvedValue({ pathname: 'p', etag: 'e' });
+      m.get.mockResolvedValue(null);
+      m.head.mockRejectedValue(new m.BlobNotFoundError());
+      m.list.mockResolvedValue({ blobs: [], hasMore: false });
+      await preview.put('a', bytes, { contentType: 'text/plain', overwrite: true });
+      await preview.getBytes('a');
+      await preview.head('a');
+      await preview.list('a/');
+      await preview.del(['a']);
+      const options = [m.put.mock.calls[0][2], m.get.mock.calls[0][1], m.head.mock.calls[0][1], m.list.mock.calls[0][0], m.del.mock.calls[0][1]];
+      expect(options).toHaveLength(5);
+      for (const o of options) {
+        expect(o.token).toBe('vercel_blob_rw_previewstore_previewsecret');
+        expect(JSON.stringify(o)).not.toMatch(/prodsecret|prodstore|oidc-prod/);
+        expect(o.oidcToken).toBeUndefined();
+        expect(o.storeId).toBeUndefined();
+      }
+      // and reads and writes are private
+      expect(m.put.mock.calls[0][2].access).toBe('private');
+      expect(m.get.mock.calls[0][1].access).toBe('private');
+    } finally {
+      for (const [k, v] of [['BLOB_READ_WRITE_TOKEN', before.t], ['BLOB_STORE_ID', before.s], ['VERCEL_OIDC_TOKEN', before.o]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+});
+
 describe('VercelBlobStore', () => {
   it('writes only to the private store, never with a random suffix, and passes the token explicitly', async () => {
     m.put.mockResolvedValue({ pathname: 'p', etag: 'e1' });
