@@ -9,16 +9,20 @@ export interface ServerConfig {
   sessionSecret: string | null;
   pepper: string | null;
   /**
-   * Prefix of the two Blob variables this deployment reads: `<prefix>_READ_WRITE_TOKEN` and `<prefix>_STORE_ID`
-   * (Preview: CRM_PREVIEW). null when CRM_BLOB_VARIABLE_PREFIX is not a CRM_… name.
-   * The unprefixed BLOB_READ_WRITE_TOKEN / BLOB_STORE_ID of the project (production's store) are never read.
+   * The Vercel Blob store connected to the project (Vercel creates BLOB_STORE_ID when a store is connected). The server
+   * authenticates to it with the short-lived OIDC token Vercel gives every function invocation: no token is stored anywhere.
    */
-  blobVarPrefix: string | null;
-  blobToken: string | undefined;
   blobStoreId: string | undefined;
+  /** stores this deployment must never use (the test store), from CRM_BLOCKED_BLOB_STORE_IDS and the leftover CRM_PREVIEW_STORE_ID */
+  blockedStoreIds: string[];
   storeDir: string | null;
   prefix: string;
   sessionHours: number;
+}
+
+/** `store_abc` and `abc` name the same store; ids are compared in lower case */
+export function normaliseStoreId(id: string): string {
+  return id.trim().replace(/^store_/i, '').toLowerCase();
 }
 
 export const MIN_ADMIN_SECRET = 16;
@@ -27,18 +31,17 @@ export const MIN_SERVER_SECRET = 32;
 export function readConfig(env: Record<string, string | undefined> = process.env): ServerConfig {
   const v = (k: string) => (env[k]?.trim() ? env[k]!.trim() : null);
   const hours = Number(env.CRM_SESSION_HOURS);
-  const rawPrefix = (env.CRM_BLOB_VARIABLE_PREFIX ?? 'CRM_PREVIEW').trim();
-  // only CRM_… names: a prefix can never resolve to the project's own BLOB_* variables
-  const blobVarPrefix = /^CRM_[A-Z0-9]+(?:_[A-Z0-9]+)*$/.test(rawPrefix) ? rawPrefix : null;
+  const vercelEnv = /^[a-z]{1,20}$/.test(env.VERCEL_ENV?.trim() ?? '') ? env.VERCEL_ENV!.trim() : null;
+  const blocked = [env.CRM_BLOCKED_BLOB_STORE_IDS ?? '', env.CRM_PREVIEW_STORE_ID ?? ''].join(',').split(',').map((s) => normaliseStoreId(s)).filter(Boolean);
   return {
     adminSecret: v('CRM_ADMIN_SECRET'),
     sessionSecret: v('CRM_SESSION_SECRET'),
     pepper: v('CRM_PUBLISH_PEPPER'),
-    blobVarPrefix,
-    blobToken: blobVarPrefix ? v(`${blobVarPrefix}_READ_WRITE_TOKEN`) ?? undefined : undefined,
-    blobStoreId: blobVarPrefix ? v(`${blobVarPrefix}_STORE_ID`) ?? undefined : undefined,
+    blobStoreId: v('BLOB_STORE_ID') ?? undefined,
+    blockedStoreIds: [...new Set(blocked)],
     storeDir: v('CRM_STORE_DIR'),
-    prefix: (v('CRM_BLOB_PREFIX') ?? 'crm-tracker').replace(/^\/+|\/+$/g, ''),
+    // Preview and Production share one store, so each gets its own folder in it: a test publish on a Preview can never touch live data
+    prefix: (v('CRM_BLOB_PREFIX') ?? (vercelEnv ? `crm-tracker/${vercelEnv}` : 'crm-tracker')).replace(/^\/+|\/+$/g, ''),
     sessionHours: Number.isFinite(hours) && hours > 0 && hours <= 72 ? hours : 8,
   };
 }
@@ -52,30 +55,21 @@ export function adminProblems(c: ServerConfig): string[] {
   return p;
 }
 
-const normaliseStoreId = (id: string) => id.trim().replace(/^store_/i, '').toLowerCase();
-/** The store id the SDK derives from a read-write token (`vercel_blob_rw_<storeId>_<secret>`). */
-const tokenStoreId = (token: string) => (/^vercel_blob_rw_([^_]+)_.+$/.exec(token)?.[1] ?? '').toLowerCase();
-
 /** What is missing or wrong for the Blob store (names only: this goes to the server log, never to a response). */
 export function blobProblems(c: ServerConfig): string[] {
-  if (!c.blobVarPrefix) return ['CRM_BLOB_VARIABLE_PREFIX (must look like CRM_PREVIEW)'];
   const p: string[] = [];
-  if (!c.blobToken) p.push(`${c.blobVarPrefix}_READ_WRITE_TOKEN`);
-  if (!c.blobStoreId) p.push(`${c.blobVarPrefix}_STORE_ID`);
-  if (c.blobToken && !tokenStoreId(c.blobToken)) p.push(`${c.blobVarPrefix}_READ_WRITE_TOKEN (not a read-write token)`);
-  if (c.blobToken && c.blobStoreId && tokenStoreId(c.blobToken) && tokenStoreId(c.blobToken) !== normaliseStoreId(c.blobStoreId)) {
-    p.push(`${c.blobVarPrefix}_READ_WRITE_TOKEN and ${c.blobVarPrefix}_STORE_ID belong to different stores`);
-  }
+  if (!c.blobStoreId) p.push('BLOB_STORE_ID (connect the Blob store to this project and environment)');
+  else if (c.blockedStoreIds.includes(normaliseStoreId(c.blobStoreId))) p.push('BLOB_STORE_ID is a store this deployment must not use (the test store)');
   return p;
 }
 
 /**
- * The directory store (local development, tests) or the private Blob store named by the prefixed variables. A token that
- * does not belong to the declared store is refused, so a production token cannot end up in a Preview by mistake.
+ * The directory store (local development, tests) or the connected private Blob store, reached with Vercel's OIDC token.
+ * A store listed as blocked is refused, so the test store cannot be used for the real dashboard by mistake.
  */
 export function makeStore(c: ServerConfig): Store | null {
   if (c.storeDir) return new FileStore(c.storeDir);
-  if (c.blobToken && blobProblems(c).length === 0) return new VercelBlobStore(c.blobToken);
+  if (c.blobStoreId && blobProblems(c).length === 0) return new VercelBlobStore({ storeId: c.blobStoreId });
   return null;
 }
 

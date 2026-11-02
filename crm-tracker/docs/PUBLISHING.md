@@ -16,7 +16,7 @@ publish from **Data Management**. Everyone else sees the new data within about a
                          └► GET /api/dataset?sha=…  (only datasets of the CURRENT version, streamed, never a Blob URL)
 ```
 
-* **The store is private.** Only the server holds the read-write token (`CRM_PREVIEW_READ_WRITE_TOKEN` on Preview), and every Blob read and write is made with `access: 'private'`. Viewers get data through the two read-only endpoints, which stream from the store.
+* **The store is private.** The server reaches it with Vercel's own OIDC token for the connected store (no read-write token exists or is configured anywhere), and every Blob read and write is made with `access: 'private'`. Viewers get data through the two read-only endpoints, which stream from the store.
 * **Viewers keep working without the service**: the page embeds a sanitized snapshot, used until a publish succeeds and whenever the API is unreachable. Published datasets override embedded ones with the same id; the others stay.
 * **First visit after this feature arrives:** whatever a browser already holds counts as published-clean, so a viewer receives updates. An administrator who imported files in an earlier build and has not published them should publish them *before* opening the new version, or the first sync replaces those datasets with the published copy.
 * **An unpublished local import is never overwritten** by a sync (the check is repeated right before each dataset is written) (it is listed in Data Management with Publish / Discard). A viewer's own removal of a dataset counts as a pending change in the same way.
@@ -52,7 +52,7 @@ Other numeric cells are not scanned (an order value is not a phone number). The 
 | Logout revokes the session id in the store, so a copied cookie stops working | `server/handlers/logout.ts` |
 | State-changing calls need the cookie **and** `X-CRM-Admin: 1` **and** a same-origin request (`Origin`, `Sec-Fetch-Site`) | `assertSameOrigin` |
 | Login throttle: each attempt is counted **before** the secret is checked, with a compare-and-swap on a counter in the store, so a parallel burst cannot out-run it; 5 attempts / 15 min per client address; if the counter cannot be stored the sign-in is refused; a short delay on a failure; 300 requests / min per session | `reserveLoginAttempt` |
-| Blob credentials come only from the prefixed variables (`CRM_PREVIEW_…`); the token must belong to the declared store; the project's `BLOB_…` variables are never read | `server/config.ts`, `tests/config.test.ts` |
+| The Blob store is reached with Vercel's per-invocation OIDC token and `BLOB_STORE_ID`, passed explicitly on every call (no stored token, no fallback to `BLOB_READ_WRITE_TOKEN`); the test store is on a block list; Preview and Production use separate folders; every read and write is `access: 'private'` | `server/store-vercel.ts`, `server/config.ts`, `tests/config.test.ts`, `tests/store-vercel.test.ts` |
 | Secrets exist only in server environment variables; the front-end bundle is checked for them in the end-to-end test | `tools/compat/e2e_publish.cjs` |
 | Public endpoints return no store URLs, no credentials, nothing but sanitized datasets of the current version; an unauthenticated caller is not told which settings are missing (the names go to the server log) | `server/handlers/snapshot.ts`, `dataset.ts` |
 | CSP, HSTS, frame and referrer headers | `vercel.json` |
@@ -86,32 +86,29 @@ the single `index.html` exactly as before:
 
 If a dashboard field shows an "Override" switch that is on, `vercel.json` still wins for the branch; the deployment's *Build Logs → Build Settings* summary shows what was used.
 
-**Environment variables (Settings → Environment Variables).** Add them for **Preview** only (optionally restricted to the branch `claude/gallant-davinci-tblebe`) and mark them *Sensitive*. They only take effect on the next deployment.
+**The Blob store.** The store `hero-crm-dashboard-blob` is connected to the project for Production and Preview. Vercel created `BLOB_STORE_ID` and `BLOB_WEBHOOK_PUBLIC_KEY` for it. The code uses `BLOB_STORE_ID` and authenticates with the **OIDC token Vercel gives every function invocation** (Vercel's supported authentication for a connected store: nothing secret is stored, copied or rotated by hand). Requirements:
+* Project → Settings → **Security** → *Secure backend access with OIDC federation* must be **enabled** (it is on by default for new projects). Without it the functions have no token and publishing stays "not set up".
+* The store must be **Private** (it is: the code only ever reads and writes with `access: 'private'`; a test enforces it) and connected to the environments you test in.
+* The separate test store `hero-crm-publish-preview` must **not** be used for the real dashboard. It is not: the code no longer reads any `CRM_PREVIEW_…` token. If `CRM_PREVIEW_STORE_ID` (or `CRM_BLOCKED_BLOB_STORE_IDS`) is still set, it acts only as a block list: if `BLOB_STORE_ID` ever pointed at that store, publishing would refuse to start. You can delete the old `CRM_PREVIEW_READ_WRITE_TOKEN`, `CRM_PREVIEW_STORE_ID` and `CRM_PREVIEW_WEBHOOK_PUBLIC_KEY` variables; nothing needs them any more.
+
+**Production and Preview share this store, so each keeps its data in its own folder:** Production under `crm-tracker/production/`, Preview under `crm-tracker/preview/` (taken from Vercel's `VERCEL_ENV`; set `CRM_BLOB_PREFIX` only if you want something else). A publish test on a Preview therefore cannot touch what Production serves. Preview data can be deleted any time in the store browser (Storage → the store → delete the `crm-tracker/preview` folder).
+
+**Environment variables (Settings → Environment Variables).** Add the three secrets for **Preview** first (optionally restricted to the branch `claude/gallant-davinci-tblebe`) and mark them *Sensitive*; add the same three to **Production** only when you decide to ship (below). They only take effect on the next deployment.
 
 | Name | Environment | Value |
 |---|---|---|
-| `CRM_PREVIEW_READ_WRITE_TOKEN` | Preview (Development optional) | created for you when the store is connected with prefix `CRM_PREVIEW` (below); never type it in by hand |
-| `CRM_PREVIEW_STORE_ID` | Preview (Development optional) | created with the store; the token must belong to this store or the server refuses to use it |
-| `CRM_PREVIEW_WEBHOOK_PUBLIC_KEY` | (created, not used) | this feature has no Blob webhooks; leave it in place, nothing reads it |
-| `CRM_ADMIN_SECRET` | Preview | the shared administrator secret, ≥ 16 characters (`openssl rand -base64 24`) |
-| `CRM_SESSION_SECRET` | Preview | ≥ 32 random characters (`openssl rand -base64 48`) |
-| `CRM_PUBLISH_PEPPER` | Preview | ≥ 32 random characters, different from the other two. **Never change it afterwards** (it keeps the anonymous tokens repeatable) |
-| `CRM_BLOB_PREFIX` | Preview, optional | default `crm-tracker` |
-| `CRM_SESSION_HOURS` | Preview, optional | default 8 (1–72) |
-| `CRM_BLOB_VARIABLE_PREFIX` | optional, **leave unset on Preview** | default `CRM_PREVIEW`. For a later Production store, set it to its own `CRM_…` prefix (for example `CRM_PROD`) and create `CRM_PROD_READ_WRITE_TOKEN` and `CRM_PROD_STORE_ID`. It must start with `CRM_`, so it can never point at the project's `BLOB_…` variables |
+| `BLOB_STORE_ID` | Preview and Production (already created by connecting the store) | the connected store; nothing to type |
+| `BLOB_WEBHOOK_PUBLIC_KEY` | (created, not used) | this feature has no Blob webhooks; leave it in place |
+| `CRM_ADMIN_SECRET` | Preview (later Production) | the shared administrator secret, ≥ 16 characters (`openssl rand -base64 24`) |
+| `CRM_SESSION_SECRET` | Preview (later Production) | ≥ 32 random characters (`openssl rand -base64 48`) |
+| `CRM_PUBLISH_PEPPER` | Preview (later Production) | ≥ 32 random characters, different from the other two. **Never change it afterwards** (it keeps the anonymous tokens repeatable). Use a different value in Production than in Preview |
+| `CRM_BLOB_PREFIX` | optional | default `crm-tracker/<VERCEL_ENV>` (see above) |
+| `CRM_SESSION_HOURS` | optional | default 8 (1–72) |
+| `CRM_BLOCKED_BLOB_STORE_IDS` | optional | comma-separated store ids this deployment must never use |
 
-**The project's own `BLOB_READ_WRITE_TOKEN` and `BLOB_STORE_ID` (the production store) are never read** by this code, even though they may be visible in the Preview environment. The server always hands the SDK its own `CRM_PREVIEW_` token explicitly (the SDK then uses that token and the store id inside it, and ignores `BLOB_*` and OIDC settings), and it will not start a Blob store without one. If `CRM_PREVIEW_READ_WRITE_TOKEN` or `CRM_PREVIEW_STORE_ID` is missing, or they name different stores, publishing is simply "not set up" (`/api/admin/session` says `configured:false` and the Runtime Logs name the variable); nothing falls back to production.
+No `BLOB_READ_WRITE_TOKEN` is needed, and none is used even if one exists in the project: the server passes the SDK its OIDC token and `BLOB_STORE_ID` explicitly on every call, and with those the SDK ignores every other credential.
 
-Do **not** add them to Production yet: Production builds `main`, which does not contain this feature, and Production's own `BLOB_…` variables stay exactly as they are.
-
-**Blob store (Project → Storage).**
-1. **Create → Blob.** Name it (for example `hero-crm-publish-preview`).
-2. **Environment variable prefix: `CRM_PREVIEW`** (this is what the code reads: `CRM_PREVIEW_READ_WRITE_TOKEN`, `CRM_PREVIEW_STORE_ID`). Not `BLOB`.
-3. **Access: Private.** Choose it when creating; do not use a public store. The code only ever reads and writes with `access: 'private'` (enforced by `tests/store-vercel.test.ts` and `tests/deploy-config.test.ts`) and never exposes a store URL.
-4. Pick the region closest to the people who use the dashboard (a store in `iad1` works from any region, with a little latency).
-5. **Connect to Project** `hero_crm_dashboard`, with environments **Preview** (and Development if you like), **not Production**.
-6. Check Settings → Environment Variables: `CRM_PREVIEW_READ_WRITE_TOKEN`, `CRM_PREVIEW_STORE_ID` and `CRM_PREVIEW_WEBHOOK_PUBLIC_KEY` are listed for Preview, and that you did not tick Production.
-Use a separate store (and token) for Production later.
+Production builds `main`, which does not contain this feature, so adding variables to Production now has no effect until this branch is merged.
 
 **Preview deployment.**
 1. Add the environment variables and the store, then push (or *Redeploy*) the branch. Vercel builds a Preview.
@@ -124,7 +121,7 @@ Use a separate store (and token) for Production later.
 |---|---|
 | Deployment → Functions tab | ten functions: `/api/health`, `/api/snapshot`, `/api/dataset`, `/api/admin/session`, `/api/admin/versions`, `/api/admin/login`, `/api/admin/logout`, `/api/admin/stage`, `/api/admin/publish`, `/api/admin/rollback` |
 | `GET $P/api/health` | `{"ok":true,"service":"crm-tracker-api","commit":"<first 7 characters of the deployed commit>","environment":"preview"}`: proves the functions are deployed and which commit answers (no configuration or secrets in it) |
-| `GET $P/api/snapshot` | `{"configured":true,"version":null,"publishedAt":null}` (with the variables and the store in place; `"configured":false` before) |
+| `GET $P/api/snapshot` | `{"configured":true,"version":null,"publishedAt":null}` with the secrets and the connected store in place (`"configured":false` before). A `500` here means the store could not be reached: check that OIDC federation is enabled and that the store is connected to Preview |
 | `GET $P/api/admin/session` | `{"configured":true,"admin":false,"expiresAt":null}` |
 | `GET $P/api/admin/versions` (no cookie) | `401` |
 | `GET $P/api/dataset?sha=` + 64 zeros | `404` |
@@ -134,7 +131,7 @@ Use a separate store (and token) for Production later.
 | Response headers on any page | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY` |
 | Sign in, import a Usage Report workbook, publish, open the Preview in a second browser | the second browser shows the new data within about a minute, without reloading |
 
-**If something is off.** `configured:false` after adding the variables: redeploy (variables apply to new deployments only), check the names and the Preview scope, and read the `/api/admin/login` Runtime Log: it lists which variable is missing or if the token and store id do not match. (The store-id check assumes the token has the form `vercel_blob_rw_<storeId>_…`, as the SDK reads it; if your token looks different the log says "not a read-write token".) A function listed as missing or failing to start: open its *Runtime Logs*; the code logs only names and error classes, never secrets. Build fails reading `index.html`: the Output must be built from the repository root (the settings above), not from `crm-tracker`.
+**If something is off.** `configured:false` after adding the variables: redeploy (variables apply to new deployments only), check the names and the Preview scope, and read the `/api/admin/login` Runtime Log: it lists which variable is missing (names only). `BLOB_STORE_ID` missing means the store is not connected to that environment. A publish that fails with "Blob authentication is unavailable" means the function received no OIDC token: enable OIDC federation (Settings → Security) and redeploy. A function listed as missing or failing to start: open its *Runtime Logs*; the code logs only names and error classes, never secrets. Build fails reading `index.html`: the Output must be built from the repository root (the settings above), not from `crm-tracker`.
 
 **What merging this branch would do.** `vercel.json` would then apply to Production too (Production would build `crm-tracker` instead of serving `index.html`). Do that only deliberately, with the Production variables and a Production store in place and after the Preview has been tested. Until then nothing about Production changes. To undo the whole setup, delete the four root files above from the branch.
 

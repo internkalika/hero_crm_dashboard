@@ -1,13 +1,22 @@
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const ROOT = __dirname;
-const serve = (dir, port) => new Promise((r) => { const s = http.createServer((q, res) => { const f = path.join(dir, q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : 'application/octet-stream' }); res.end(fs.readFileSync(f)); }).listen(port, () => r(s)); });
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
+// serves a build directory like a static host with a single-page-app fallback; there is no backend: /api answers 404
+const serve = (dir, port) => new Promise((r) => { const s = http.createServer((q, res) => { const u = decodeURIComponent(q.url.split('?')[0]); if (u.startsWith('/api/')) { res.writeHead(404); return res.end(); } let f = path.join(dir, u); if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(dir, 'index.html'); res.writeHead(200, { 'content-type': MIME[path.extname(f)] ?? 'application/octet-stream' }); res.end(fs.readFileSync(f)); }).listen(port, () => r(s)); });
+// REBUILT_STYLE=path tests the multi-file Vercel build (BrowserRouter); the default tests the single file (hash routes)
+const STYLE = process.env.REBUILT_STYLE === 'path' ? 'path' : 'hash';
+const WAIT = Number(process.env.WAIT_MS ?? 2500); // how long a page is given to settle (charts animate and load lazily)
+const PD = Number(process.env.DEPLOYED_PORT ?? 8101), PR = Number(process.env.REBUILT_PORT ?? 8102);
+const nav = (url, route, side) => (side === 'rebuilt' && STYLE === 'path' ? url + route.slice(1) : url + '#' + route);
 const ROUTES = ['/', '/overview', '/dealer/orders', '/dealer/complaints', '/hero-smiles', '/datasense/orders', '/datasense/complaints', '/datasense/employees', '/bizom/usage', '/compare/bizom-vs-sfa', '/issues', '/import'];
 const norm = (t) => t.replace(/\bData Management\b/g, '').replace(/\s+/g, ' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM|am|pm)?\b/g, '<time>').trim();
-async function grab(page, url, route) {
-  await page.goto(url + '#' + route, { waitUntil: 'load' });
+async function grab(page, url, route, side) {
+  // every page is loaded cold, on both sides: moving between hash routes would keep one page alive (the charts cache text measurements)
+  await page.goto('about:blank');
+  await page.goto(nav(url, route, side), { waitUntil: 'load' });
   await page.waitForFunction(() => document.querySelector('main, #root')?.innerText.length > 200, null, { timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(WAIT);
   return page.evaluate(() => {
     const t = (s) => [...document.querySelectorAll(s)];
     return {
@@ -30,17 +39,17 @@ async function dumpDb(page) {
   });
 }
 (async () => {
-  const sd = await serve(path.join(ROOT, 'deployed'), 8101), sr = await serve(path.join(ROOT, 'rebuilt'), 8102);
+  const sd = await serve(path.join(ROOT, 'deployed'), PD), sr = await serve(path.join(ROOT, 'rebuilt'), PR);
   const browser = await chromium.launch();
   const out = { routes: {}, db: {} };
-  const sides = [['deployed', 'http://localhost:8101/'], ['rebuilt', 'http://localhost:8102/']];
+  const sides = [['deployed', `http://localhost:${PD}/`], ['rebuilt', `http://localhost:${PR}/`]];
   const data = {};
   for (const [name, url] of sides) {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage(); const errs = []; page.on('pageerror', (e) => errs.push(String(e))); page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
     data[name] = { pages: {}, errs };
     for (const r of ROUTES) {
-      data[name].pages[r] = await grab(page, url, r);
+      data[name].pages[r] = await grab(page, url, r, name);
       await page.screenshot({ path: path.join(ROOT, 'shots', `${name}${r === '/' ? '-landing' : r.replace(/\//g, '-')}.png`), fullPage: true });
     }
     data[name].db = await dumpDb(page);

@@ -1,20 +1,45 @@
-// A PRIVATE Vercel Blob store, reached with the server-side read-write token handed in by config.ts (the CRM_PREVIEW_… one on
-// Preview). Every call passes that token explicitly: with an explicit token the SDK uses it, and the store id inside it, and
-// never looks at the project's BLOB_READ_WRITE_TOKEN / BLOB_STORE_ID / OIDC settings.
+// A PRIVATE Vercel Blob store, reached with Vercel's supported authentication for a connected store: the short-lived OIDC token
+// that Vercel hands to every function invocation, plus the store id (BLOB_STORE_ID). No token is stored or configured anywhere.
+// Both are passed to the SDK explicitly on every call: with an explicit OIDC token and store id the SDK uses exactly those and never
+// looks at BLOB_READ_WRITE_TOKEN or any other store, so a leftover credential can not be picked up by accident.
 import { BlobNotFoundError, BlobPreconditionFailedError, del, get, head, list, put } from '@vercel/blob';
+import { getVercelOidcToken } from '@vercel/oidc';
 import { PreconditionFailed, type PutOptions, type Store, type StoredObject } from './store.js';
 
 const meta = (b: { etag: string; size: number; uploadedAt: Date }): StoredObject => ({ etag: b.etag, size: b.size, uploadedAt: b.uploadedAt.toISOString() });
 
+export interface BlobStoreOptions {
+  storeId: string;
+  /** the OIDC token of the current invocation (Vercel supplies it per request); replaceable in tests */
+  getOidcToken?: () => Promise<string>;
+}
+
 export class VercelBlobStore implements Store {
   readonly kind = 'vercel-blob' as const;
-  constructor(private readonly token: string) {
-    if (!token) throw new Error('A Blob read-write token is required: refusing to fall back to the environment.');
+  private readonly storeId: string;
+  private readonly getOidcToken: () => Promise<string>;
+
+  constructor(opts: BlobStoreOptions) {
+    if (!opts?.storeId) throw new Error('A Blob store id is required: refusing to fall back to the environment.');
+    this.storeId = opts.storeId;
+    this.getOidcToken = opts.getOidcToken ?? getVercelOidcToken;
+  }
+
+  /** Fresh credentials for one SDK call: the OIDC token of this invocation and the connected store. Never a read-write token. */
+  private async auth(): Promise<{ oidcToken: string; storeId: string }> {
+    let oidcToken: string;
+    try {
+      oidcToken = (await this.getOidcToken())?.trim();
+    } catch {
+      throw new Error('Blob authentication is unavailable: no Vercel OIDC token for this request (is OIDC enabled for the project?).');
+    }
+    if (!oidcToken) throw new Error('Blob authentication is unavailable: empty Vercel OIDC token.');
+    return { oidcToken, storeId: this.storeId };
   }
 
   async head(path: string) {
     try {
-      return meta(await head(path, { token: this.token }));
+      return meta(await head(path, await this.auth()));
     } catch (e) {
       if (e instanceof BlobNotFoundError) return null;
       throw e;
@@ -22,7 +47,7 @@ export class VercelBlobStore implements Store {
   }
   async getStream(path: string) {
     // useCache:false: the pointer and the manifests must be the latest content, not an edge-cached copy
-    const r = await get(path, { access: 'private', token: this.token, useCache: false });
+    const r = await get(path, { access: 'private', ...(await this.auth()), useCache: false });
     if (!r || r.statusCode !== 200) return null;
     return { stream: r.stream, etag: r.blob.etag, size: r.blob.size, uploadedAt: r.blob.uploadedAt.toISOString() };
   }
@@ -36,7 +61,7 @@ export class VercelBlobStore implements Store {
     try {
       const r = await put(path, Buffer.from(bytes), {
         access: 'private',
-        token: this.token,
+        ...(await this.auth()),
         contentType: opts.contentType,
         addRandomSuffix: false,
         allowOverwrite: opts.overwrite === true || opts.ifMatch !== undefined,
@@ -56,13 +81,13 @@ export class VercelBlobStore implements Store {
     const out: Array<{ path: string } & StoredObject> = [];
     let cursor: string | undefined;
     do {
-      const r = await list({ prefix, cursor, limit: 1000, token: this.token });
+      const r = await list({ prefix, cursor, limit: 1000, ...(await this.auth()) });
       for (const b of r.blobs) out.push({ path: b.pathname, ...meta(b) });
       cursor = r.hasMore ? r.cursor : undefined;
     } while (cursor);
     return out;
   }
   async del(paths: string[]) {
-    if (paths.length) await del(paths, { token: this.token });
+    if (paths.length) await del(paths, await this.auth());
   }
 }
