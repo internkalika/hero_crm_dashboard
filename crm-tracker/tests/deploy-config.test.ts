@@ -12,6 +12,7 @@ import * as rollback from '../server/handlers/rollback.js';
 import * as versions from '../server/handlers/versions.js';
 import * as snapshot from '../server/handlers/snapshot.js';
 import * as dataset from '../server/handlers/dataset.js';
+import * as health from '../server/handlers/health.js';
 
 const REPO = path.resolve(__dirname, '../..');
 const read = (p: string) => fs.readFileSync(path.join(REPO, p), 'utf8');
@@ -22,6 +23,7 @@ const appCfg = JSON.parse(read('crm-tracker/vercel.json'));
 const ENDPOINTS: Record<string, [Record<string, unknown>, 'GET' | 'POST', string]> = {
   '/api/snapshot': [snapshot, 'GET', 'snapshot'],
   '/api/dataset': [dataset, 'GET', 'dataset'],
+  '/api/health': [health, 'GET', 'health'],
   '/api/admin/session': [session, 'GET', 'session'],
   '/api/admin/versions': [versions, 'GET', 'versions'],
   '/api/admin/login': [login, 'POST', 'login'],
@@ -34,7 +36,7 @@ const ENDPOINTS: Record<string, [Record<string, unknown>, 'GET' | 'POST', string
 const walk = (d: string): string[] => fs.readdirSync(path.join(REPO, d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]));
 
 describe('root api shims (the functions Vercel deploys)', () => {
-  it('are exactly the nine endpoints, one file each', () => {
+  it('are exactly the ten endpoints, one file each', () => {
     expect(walk('api').sort()).toEqual(Object.keys(ENDPOINTS).map((r) => `${r.slice(1)}.ts`).sort());
   });
   for (const [route, [mod, method, handler]] of Object.entries(ENDPOINTS)) {
@@ -77,7 +79,7 @@ describe('root vercel.json', () => {
     expect(destination).toBe('/index.html');
     const re = new RegExp(`^${source}$`);
     for (const p of ['/', '/admin', '/import', '/overview', '/datasense/employees', '/compare/bizom-vs-sfa', '/dealer/orders', '/hero-smiles']) expect(re.test(p), p).toBe(true);
-    for (const p of [...Object.keys(ENDPOINTS), '/api/anything', '/assets/index-abc.js']) expect(re.test(p), p).toBe(false);
+    for (const p of [...Object.keys(ENDPOINTS), '/api/anything', '/api/health', '/assets/index-abc.js']) expect(re.test(p), p).toBe(false);
   });
   it('has the same security headers as the app-level config', () => {
     expect(rootCfg.headers).toEqual(appCfg.headers);

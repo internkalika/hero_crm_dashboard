@@ -15,10 +15,11 @@ import * as rollback from '../server/handlers/rollback';
 import * as versions from '../server/handlers/versions';
 import * as snapshot from '../server/handlers/snapshot';
 import * as dataset from '../server/handlers/dataset';
+import * as health from '../server/handlers/health';
 
 type H = Partial<Record<'GET' | 'POST', (r: Request) => Promise<Response>>>;
 const routes: Record<string, H> = {
-  '/api/snapshot': snapshot, '/api/dataset': dataset,
+  '/api/snapshot': snapshot, '/api/dataset': dataset, '/api/health': health,
   '/api/admin/login': login, '/api/admin/logout': logout, '/api/admin/session': session, '/api/admin/stage': stage,
   '/api/admin/publish': publish, '/api/admin/rollback': rollback, '/api/admin/versions': versions,
 };

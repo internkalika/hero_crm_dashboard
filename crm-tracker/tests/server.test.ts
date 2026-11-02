@@ -16,6 +16,7 @@ import * as rollbackH from '../server/handlers/rollback.js';
 import * as versionsH from '../server/handlers/versions.js';
 import * as snapshotH from '../server/handlers/snapshot.js';
 import * as datasetH from '../server/handlers/dataset.js';
+import * as healthH from '../server/handlers/health.js';
 import { encodeDataset, decodeDataset } from '../src/lib/publish/codec.js';
 import type { DatasetMeta, DatasetPayload } from '../src/lib/types.js';
 import type { SnapshotStatus, VersionSummary } from '../src/lib/publish/types.js';
@@ -91,6 +92,33 @@ async function upload(cookie: string, p: DatasetPayload, partSize = 400) {
 }
 const publish = async (cookie: string, body: unknown) => publishH.POST(req('POST', '/api/admin/publish', { cookie, body }));
 const status = async () => (await (await snapshotH.GET(req('GET', '/api/snapshot'))).json()) as SnapshotStatus;
+
+describe('health', () => {
+  it('answers without configuration, says which build runs, and exposes nothing else', async () => {
+    const saved = { sha: process.env.VERCEL_GIT_COMMIT_SHA, env: process.env.VERCEL_ENV, secret: process.env.CRM_ADMIN_SECRET, tok: process.env.CRM_PREVIEW_READ_WRITE_TOKEN };
+    process.env.VERCEL_GIT_COMMIT_SHA = '4041939393e2fec48236032b6205600a1fa93ca630';
+    process.env.VERCEL_ENV = 'preview';
+    process.env.CRM_ADMIN_SECRET = 'must-never-appear-in-health-output';
+    process.env.CRM_PREVIEW_READ_WRITE_TOKEN = 'vercel_blob_rw_x_must-never-appear';
+    try {
+      setContext(ctxWith(null, { CRM_ADMIN_SECRET: 'short' }));
+      const res = await healthH.GET(req('GET', '/api/health'));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ ok: true, service: 'crm-tracker-api', commit: '4041939', environment: 'preview' });
+      expect(JSON.stringify(body)).not.toMatch(/must-never-appear|blob|secret|token/i);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      delete process.env.VERCEL_GIT_COMMIT_SHA;
+      delete process.env.VERCEL_ENV;
+      expect(await (await healthH.GET(req('GET', '/api/health'))).json()).toMatchObject({ ok: true, commit: null, environment: null });
+    } finally {
+      for (const [k, v] of [['VERCEL_GIT_COMMIT_SHA', saved.sha], ['VERCEL_ENV', saved.env], ['CRM_ADMIN_SECRET', saved.secret], ['CRM_PREVIEW_READ_WRITE_TOKEN', saved.tok]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+});
 
 describe('not configured', () => {
   it('says only that publishing is not set up, and the public API stays harmless', async () => {

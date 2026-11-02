@@ -122,7 +122,8 @@ Use a separate store (and token) for Production later.
 
 | Check | Expected |
 |---|---|
-| Deployment → Functions tab | nine functions: `/api/snapshot`, `/api/dataset`, `/api/admin/session`, `/api/admin/versions`, `/api/admin/login`, `/api/admin/logout`, `/api/admin/stage`, `/api/admin/publish`, `/api/admin/rollback` |
+| Deployment → Functions tab | ten functions: `/api/health`, `/api/snapshot`, `/api/dataset`, `/api/admin/session`, `/api/admin/versions`, `/api/admin/login`, `/api/admin/logout`, `/api/admin/stage`, `/api/admin/publish`, `/api/admin/rollback` |
+| `GET $P/api/health` | `{"ok":true,"service":"crm-tracker-api","commit":"<first 7 characters of the deployed commit>","environment":"preview"}`: proves the functions are deployed and which commit answers (no configuration or secrets in it) |
 | `GET $P/api/snapshot` | `{"configured":true,"version":null,"publishedAt":null}` (with the variables and the store in place; `"configured":false` before) |
 | `GET $P/api/admin/session` | `{"configured":true,"admin":false,"expiresAt":null}` |
 | `GET $P/api/admin/versions` (no cookie) | `401` |
