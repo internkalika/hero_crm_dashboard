@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '../..');
 const PORT = 4175;
 const BASE = `http://localhost:${PORT}`;
 const SECRET = 'correct horse battery staple';
+const EMAIL = 'intern.kalika@herocycles.com';
+const signIn = async (p, email, pw, wait = 2500) => { await p.fill('#admin-email', email); await p.fill('#admin-password', pw); await p.click('button:has-text("Sign in")'); await sleep(wait); };
 const FX = path.join(__dirname, 'fixtures', 'usage');
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
@@ -71,7 +73,7 @@ async function importFile(p, file, mode) {
     check('viewer sees the embedded Usage Report without signing in', base === 29679, `Orders recorded ${base}`);
     await B.page.goto(`${BASE}/admin`); await sleep(2000);
     const bt = await text(B.page);
-    check('viewer sees "nothing published yet" and no admin tools', /Nothing published yet/.test(bt) && /Administrator secret/i.test(bt) && !/Review and publish/.test(bt));
+    check('viewer sees "nothing published yet", a sign-in form, and no admin tools', /Nothing published yet/.test(bt) && (await B.page.locator('#admin-email').count()) === 1 && !/Review and publish|Published versions|Datasets in use/.test(bt));
     await B.page.goto(`${BASE}/datasense/employees`); await sleep(2500);
 
     // ------------------------------------------------------------- the built app never contains a secret
@@ -81,13 +83,49 @@ async function importFile(p, file, mode) {
     const rawLeak = /917002533087|916301773040|919550387445/.test(bundle);
     check('the embedded fallback no longer carries the Hero Smiles mobile numbers', !rawLeak);
 
+    // ------------------------------------------------------------- the public visitor: all dashboards open, no data tools, no admin API
+    const PUB = await mk({ 'x-forwarded-for': '198.51.100.40' });
+    const pages = ['/', '/overview', '/datasense/employees', '/admin', '/import'];
+    for (const route of pages) {
+      await PUB.page.goto(`${BASE}${route}`); await sleep(2200);
+      const body = await text(PUB.page);
+      check(`public visitor can open ${route} (no login, no error screen)`, body.length > 200 && !/Something went wrong|Application error/i.test(body), body.slice(0, 60).replace(/\s+/g, ' '));
+    }
+    const navTxt = await (async () => { await PUB.page.goto(`${BASE}/`); await sleep(2000); return text(PUB.page); })();
+    check('Data Import and Data Management stay visible to the public in the navigation', /Data Import/i.test(navTxt) && /Data Management/i.test(navTxt));
+    await PUB.page.goto(`${BASE}/import`); await sleep(2000);
+    const it = await text(PUB.page);
+    check('public /import shows the restricted notice, a sign-in form and no file chooser', /restricted to the administrator/i.test(it) && (await PUB.page.locator('#admin-email').count()) === 1 && (await PUB.page.locator('input[type=file]').count()) === 0);
+    const api = await PUB.page.evaluate(async () => {
+      const out = {};
+      const csrf = { 'X-CRM-Admin': '1', 'Content-Type': 'application/json' };
+      for (const [name, url, method] of [
+        ['versions GET', '/api/admin/versions', 'GET'], ['versions DELETE', '/api/admin/versions', 'DELETE'],
+        ['stage POST', '/api/admin/stage?upload=aaaaaaaaaaaaaaaa&part=0', 'POST'], ['stage PUT', '/api/admin/stage?upload=aaaaaaaaaaaaaaaa&part=0', 'PUT'],
+        ['publish POST', '/api/admin/publish', 'POST'], ['publish PATCH', '/api/admin/publish', 'PATCH'],
+        ['rollback POST', '/api/admin/rollback', 'POST'], ['rollback DELETE', '/api/admin/rollback', 'DELETE'],
+      ]) {
+        const r = await fetch(url, { method, headers: method === 'GET' ? {} : csrf, body: method === 'GET' ? undefined : '{}', credentials: 'same-origin' });
+        out[name] = r.status;
+      }
+      return out;
+    });
+    check('direct API calls without a session are all refused (401/403)', Object.values(api).every((s) => s === 401 || s === 403), JSON.stringify(api));
+    check('the public session endpoint reveals no administrator identity', await PUB.page.evaluate(async () => { const j = await (await fetch('/api/admin/session')).json(); return j.admin === false && !('email' in j); }));
+    const pubStore = await PUB.page.evaluate(async () => { const s = JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]); return s; });
+    check('nothing administrative is kept in browser storage', !/admin|secret|crm_admin/i.test(pubStore));
+
     // ------------------------------------------------------------- administrator A signs in
     const A = await mk({ 'x-forwarded-for': '203.0.113.10' });
     await A.page.goto(`${BASE}/admin`); await sleep(2000);
-    await A.page.fill('#admin-secret', 'not the secret'); await A.page.click('button:has-text("Sign in")'); await sleep(1500);
-    check('wrong secret is refused with a clear message', /not correct/.test(await text(A.page)));
-    await A.page.fill('#admin-secret', SECRET); await A.page.click('button:has-text("Sign in")'); await sleep(2500);
-    check('right secret signs in', /Signed in as administrator/.test(await text(A.page)));
+    await signIn(A.page, EMAIL, 'not the secret', 1500);
+    check('wrong password is refused with a clear message', /not correct/.test(await text(A.page)));
+    await signIn(A.page, 'someone.else@herocycles.com', SECRET, 1500);
+    check('wrong email with the right password is refused with the same message', /That email or password is not correct/.test(await text(A.page)) && !/Signed in as the administrator/.test(await text(A.page)));
+    await signIn(A.page, EMAIL.toUpperCase(), SECRET, 1500);
+    check('the email must match exactly (upper case refused)', !/Signed in as the administrator/.test(await text(A.page)));
+    await signIn(A.page, EMAIL, SECRET);
+    check('the right email and password sign in', /Signed in as the administrator/.test(await text(A.page)) && (await text(A.page)).includes(EMAIL));
     const jsCookie = await A.page.evaluate(() => document.cookie);
     const cookies = await A.ctx.cookies();
     const c = cookies.find((x) => x.name === 'crm_admin');
@@ -162,7 +200,7 @@ async function importFile(p, file, mode) {
     // ------------------------------------------------------------- concurrent publishes from two administrators
     const A2 = await mk({ 'x-forwarded-for': '203.0.113.11' });
     await A2.page.goto(`${BASE}/admin`); await sleep(1500);
-    await A2.page.fill('#admin-secret', SECRET); await A2.page.click('button:has-text("Sign in")'); await sleep(2500);
+    await signIn(A2.page, EMAIL, SECRET);
     await importFile(A2.page, path.join(FX, 'App_Usage_Report_Dec.xlsx'), 'Merge');
     await importFile(A.page, path.join(FX, 'App_Usage_Report_Jan.xlsx'), 'Merge');
     for (const X of [A, A2]) { await X.page.goto(`${BASE}/admin`); await sleep(2500); await X.page.click('button:has-text("Review and publish")'); await sleep(5000); }
@@ -181,17 +219,19 @@ async function importFile(p, file, mode) {
     await C.page.goto(`${BASE}/`); await sleep(2500);
     check('the landing page renders from the embedded data', /Dealer App vs DataSense SFA/.test(await text(C.page)) && (await C.page.locator('.recharts-surface').count()) > 5);
     await C.page.goto(`${BASE}/admin`); await sleep(2000);
-    check('Data Management says publishing is not available, instead of failing', /not available here/.test(await text(C.page)));
+    check('Data Management says publishing is not available, instead of failing', /temporarily unavailable/.test(await text(C.page)) && (await C.page.locator('input[type=file]').count()) === 0);
 
     // ------------------------------------------------------------- sign out, and brute force protection
     await A.page.goto(`${BASE}/admin`); await sleep(2000);
     await A.page.click('button:has-text("Sign out")'); await sleep(2000);
     const after = await A.page.evaluate(async () => (await fetch('/api/admin/versions', { credentials: 'same-origin' })).status);
-    check('after sign-out the admin API is closed and the form is back', after === 401 && /Administrator secret/i.test(await text(A.page)), `status ${after}`);
+    check('after sign-out the admin API is closed and the form is back', after === 401 && (await A.page.locator('#admin-email').count()) === 1, `status ${after}`);
+    await A.page.goto(`${BASE}/import`); await sleep(2000);
+    check('after sign-out the import page is closed again (no file chooser)', (await A.page.locator('input[type=file]').count()) === 0 && /restricted to the administrator/i.test(await text(A.page)));
     const X = await mk({ 'x-forwarded-for': '192.0.2.99' });
     await X.page.goto(`${BASE}/admin`); await sleep(1500);
-    for (let i = 0; i < 5; i++) { await X.page.fill('#admin-secret', 'guess' + i); await X.page.click('button:has-text("Sign in")'); await sleep(1100); }
-    await X.page.fill('#admin-secret', SECRET); await X.page.click('button:has-text("Sign in")'); await sleep(1500);
+    for (let i = 0; i < 5; i++) await signIn(X.page, EMAIL, 'guess' + i, 1100);
+    await signIn(X.page, EMAIL, SECRET, 1500);
     check('after 5 wrong guesses even the right secret is refused for a while', /Too many failed attempts/.test(await text(X.page)));
 
     // ------------------------------------------------------------- the store holds no raw or personal data

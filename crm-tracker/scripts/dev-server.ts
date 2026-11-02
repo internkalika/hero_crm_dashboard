@@ -17,7 +17,7 @@ import * as snapshot from '../server/handlers/snapshot';
 import * as dataset from '../server/handlers/dataset';
 import * as health from '../server/handlers/health';
 
-type H = Partial<Record<'GET' | 'POST', (r: Request) => Promise<Response>>>;
+type H = Partial<Record<string, (r: Request) => Promise<Response>>>;
 const routes: Record<string, H> = {
   '/api/snapshot': snapshot, '/api/dataset': dataset, '/api/health': health,
   '/api/admin/login': login, '/api/admin/logout': logout, '/api/admin/session': session, '/api/admin/stage': stage,
@@ -31,7 +31,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
   const route = routes[url.pathname];
   if (url.pathname.startsWith('/api/')) {
-    const fn = route?.[req.method as 'GET' | 'POST'];
+    const fn = route?.[req.method ?? ''];
     if (!fn) {
       res.writeHead(route ? 405 : 404).end();
       return;

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileStore } from '../server/store-file.js';
-import { readConfig, setContext } from '../server/config.js';
+import { ADMIN_EMAIL, readConfig, setContext } from '../server/config.js';
 import { resetAuthMemory } from '../server/auth.js';
 import * as login from '../server/handlers/login.js';
 import * as logout from '../server/handlers/logout.js';
@@ -114,7 +114,7 @@ describe('a viewer', () => {
     await markClean([bizom().meta]); // seeded from the embedded snapshot: clean
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']])); // then the administrator imports two files
     await saveDataset(loyalty());
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     const st0 = await fetchStatus();
     expect((await localChanges()).map((c) => [c.id, c.kind])).toEqual([['ds_usage:all', 'new'], ['loyalty_snapshot:2026-10-26', 'new']]);
     const out = await publishLocal({ ids: ['ds_usage:all', 'loyalty_snapshot:2026-10-26'], remove: [], baseVersion: st0!.version?.versionId ?? null, note: 'first' });
@@ -136,7 +136,7 @@ describe('a viewer', () => {
     expect((await syncPublished()).state).toBe('current'); // nothing new: no download
   });
   it('picks up a newer version on the next check, and a rollback', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open']]));
     const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']], '2026-11-02T00:00:00.000Z', 'merge'));
@@ -148,7 +148,7 @@ describe('a viewer', () => {
     expect((await loadPayload('ds_usage:all'))!.records).toHaveLength(2);
     // administrator (another browser) restores version one
     jar = '';
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await adminRollback(v1.versionId!, v2.versionId!);
     jar = '';
     const r = await syncPublished();
@@ -156,7 +156,7 @@ describe('a viewer', () => {
     expect((await loadPayload('ds_usage:all'))!.records).toHaveLength(1);
   });
   it('never overwrites an unpublished local import, and says so', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open']]));
     const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
     // another administrator publishes a newer one while this browser holds a local, unpublished import
@@ -164,7 +164,7 @@ describe('a viewer', () => {
     const local = (await loadPayload('ds_usage:all'))!;
     await freshBrowser();
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']], '2026-11-02T00:00:00.000Z'));
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: v1.versionId, note: 'two' });
     // back in the first browser
     await freshBrowser();
@@ -181,7 +181,7 @@ describe('a viewer', () => {
     expect(await localChanges()).toEqual([]);
   });
   it('treats a local removal as a pending change, not something the next sync undoes', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open']]));
     await saveDataset(bizom());
     await publishLocal({ ids: ['ds_usage:all', 'bizom_usage:2026-10'], remove: [], baseVersion: null, note: 'one' });
@@ -206,7 +206,7 @@ describe('a viewer', () => {
 
 describe('a local import that lands while a sync is downloading', () => {
   it('is kept, not overwritten', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open']]));
     const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']], '2026-11-02T00:00:00.000Z', 'merge'));
@@ -246,7 +246,7 @@ describe('hosts without a backend', () => {
 
 describe('the administrator', () => {
   it('previews what a publish does before doing it, including what the sanitizer would change', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']]));
     await saveDataset(loyalty());
     const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
@@ -259,7 +259,7 @@ describe('the administrator', () => {
     expect(v1.versionId).toBeTruthy();
   });
   it('is told when someone else published first, and nothing is lost', async () => {
-    await adminLogin(ADMIN_SECRET);
+    await adminLogin(ADMIN_EMAIL, ADMIN_SECRET);
     await saveDataset(usage([['a', 'Open']]));
     const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
     await saveDataset(usage([['a', 'Open'], ['b', 'Open']], '2026-11-02T00:00:00.000Z', 'merge'));

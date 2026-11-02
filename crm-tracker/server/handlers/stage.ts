@@ -1,6 +1,7 @@
 import { requireAdmin } from '../auth.js';
+import { deny } from './denied.js';
 import { getContext } from '../config.js';
-import { HttpError, guard, json, methodNotAllowed } from '../http.js';
+import { HttpError, guard, json } from '../http.js';
 import { MAX_PART_BYTES, stagePart } from '../versions.js';
 
 /** Receives one chunk (up to ~3.5 MB, below the platform's 4.5 MB request limit) of a gzipped dataset. */
@@ -14,4 +15,7 @@ export const POST = guard(async (request) => {
   await stagePart(ctx, url.searchParams.get('upload') ?? '', Number(url.searchParams.get('part')), bytes);
   return json({ ok: true });
 });
-export const GET = () => methodNotAllowed('POST');
+export const GET = deny('POST');
+export const PUT = deny('POST');
+export const PATCH = deny('POST');
+export const DELETE = deny('POST');

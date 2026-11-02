@@ -64,9 +64,12 @@ export interface AdminSession {
   configured: boolean;
   admin: boolean;
   expiresAt: string | null;
+  /** the administrator's email, given only to the administrator */
+  email?: string;
 }
 export const adminSession = () => call<AdminSession>('/api/admin/session');
-export const adminLogin = (secret: string) => post<{ admin: true; expiresAt: string }>('/api/admin/login', { secret });
+/** The one administrator signs in with the fixed email address and the administrator password. */
+export const adminLogin = (email: string, password: string) => post<{ admin: true; email: string; expiresAt: string }>('/api/admin/login', { email, password });
 export const adminLogout = () => post<{ admin: false }>('/api/admin/logout', {});
 export const adminVersions = () => call<{ current: string | null; versions: VersionSummary[] }>('/api/admin/versions', {}, true);
 export const adminManifest = (id: string) => call<{ manifest: VersionManifest | null }>(`/api/admin/versions?id=${encodeURIComponent(id)}`, {}, true);

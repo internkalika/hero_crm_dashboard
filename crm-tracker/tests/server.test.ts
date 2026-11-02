@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileStore } from '../server/store-file.js';
 import { PreconditionFailed, type PutOptions, type Store } from '../server/store.js';
-import { setContext, readConfig, type Context } from '../server/config.js';
+import { setContext, readConfig, ADMIN_EMAIL, type Context } from '../server/config.js';
 import { resetAuthMemory, COOKIE, createSessionToken } from '../server/auth.js';
 import * as login from '../server/handlers/login.js';
 import * as logout from '../server/handlers/logout.js';
@@ -57,7 +57,7 @@ const req = (method: string, url: string, o: Opts = {}) => {
 };
 const cookieOf = (res: Response) => /crm_admin=([^;]*)/.exec(res.headers.get('set-cookie') ?? '')?.[1] ?? '';
 async function signIn(ip?: string) {
-  const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip }));
+  const res = await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip }));
   expect(res.status).toBe(200);
   return cookieOf(res);
 }
@@ -123,7 +123,7 @@ describe('health', () => {
 describe('not configured', () => {
   it('says only that publishing is not set up, and the public API stays harmless', async () => {
     setContext(ctxWith(null, { CRM_ADMIN_SECRET: 'short' }));
-    const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: 'short' } }));
+    const res = await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: 'short' } }));
     expect(res.status).toBe(503);
     const b = await res.json();
     expect(b).toMatchObject({ error: 'not_configured' });
@@ -135,9 +135,9 @@ describe('not configured', () => {
 
 describe('administrator sign-in', () => {
   it('rejects a wrong secret and accepts the right one with a hardened cookie that never contains the secret', async () => {
-    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: 'wrong' } }))).status).toBe(401);
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: 'wrong' } }))).status).toBe(401);
     expect((await login.POST(req('POST', '/api/admin/login', { body: {} }))).status).toBe(401);
-    const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET } }));
+    const res = await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET } }));
     expect(res.status).toBe(200);
     const sc = res.headers.get('set-cookie')!;
     expect(sc).toMatch(/HttpOnly/);
@@ -179,27 +179,27 @@ describe('administrator sign-in', () => {
     expect(crossOrigin.status).toBe(403);
     const crossSite = await publishH.POST(req('POST', '/api/admin/publish', { cookie: c, headers: { 'sec-fetch-site': 'cross-site' }, body: { baseVersion: null, datasets: [] } }));
     expect(crossSite.status).toBe(403);
-    expect((await login.POST(req('POST', '/api/admin/login', { admin: false, body: { secret: ENV.CRM_ADMIN_SECRET } }))).status).toBe(403);
+    expect((await login.POST(req('POST', '/api/admin/login', { admin: false, body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET } }))).status).toBe(403);
   });
   it('locks out an address after 5 wrong secrets, even for the right secret, until the window passes', async () => {
-    for (let i = 0; i < 5; i++) expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: `nope${i}` }, ip: '198.51.100.9' }))).status).toBe(401);
-    const locked = await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }));
+    for (let i = 0; i < 5; i++) expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: `nope${i}` }, ip: '198.51.100.9' }))).status).toBe(401);
+    const locked = await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }));
     expect(locked.status).toBe(429);
     expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
-    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.10' }))).status).toBe(200); // another address is unaffected
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.10' }))).status).toBe(200); // another address is unaffected
     resetAuthMemory(); // a different server instance still sees the failures through the store
-    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }))).status).toBe(429);
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }))).status).toBe(429);
     clock += 16 * 60_000;
     resetAuthMemory();
-    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }))).status).toBe(200);
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }))).status).toBe(200);
   }, 20000);
   it('counts a burst of parallel guesses one by one: only the first few are ever checked', async () => {
     const ip = '198.51.100.77';
-    const burst = await Promise.all(Array.from({ length: 25 }, (_, i) => login.POST(req('POST', '/api/admin/login', { body: { secret: `guess-${i}` }, ip }))));
+    const burst = await Promise.all(Array.from({ length: 25 }, (_, i) => login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: `guess-${i}` }, ip }))));
     const checked = burst.filter((r) => r.status === 401).length;
     expect(checked).toBeLessThanOrEqual(5);
     expect(burst.every((r) => r.status === 401 || r.status === 429)).toBe(true);
-    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip }))).status).toBe(429); // locked, even for the right secret
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET }, ip }))).status).toBe(429); // locked, even for the right secret
   }, 30000);
   it('refuses sign-in (fails closed) when the attempt counter cannot be stored', async () => {
     class Broken extends FileStore {
@@ -208,7 +208,7 @@ describe('administrator sign-in', () => {
       }
     }
     setContext(ctxWith(new Broken(dir)));
-    const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET } }));
+    const res = await login.POST(req('POST', '/api/admin/login', { body: { email: ADMIN_EMAIL, password: ENV.CRM_ADMIN_SECRET } }));
     expect(res.status).toBe(503);
   });
   it('keeps the admin endpoints closed without a session', async () => {
@@ -410,5 +410,144 @@ describe('concurrency and failure', () => {
     await s.put('x/current', new Uint8Array([3]), { contentType: 'x', ifMatch: first.etag });
     await expect(s.put('x/current', new Uint8Array([4]), { contentType: 'x' })).rejects.toBeInstanceOf(PreconditionFailed); // immutable unless said otherwise
     expect((await s.getBytes('x/current'))!.bytes[0]).toBe(3);
+  });
+});
+
+describe('single administrator: identity and access control', () => {
+  const doLogin = (body: unknown, ip = '192.0.2.50') => login.POST(req('POST', '/api/admin/login', { body, ip }));
+  const PW = ENV.CRM_ADMIN_SECRET;
+
+  it('the only permitted email is intern.kalika@herocycles.com', () => {
+    expect(ADMIN_EMAIL).toBe('intern.kalika@herocycles.com');
+  });
+  it('needs BOTH the exact email and the right password', async () => {
+    const bad: unknown[] = [
+      { email: 'other@herocycles.com', password: PW },
+      { email: 'INTERN.KALIKA@herocycles.com', password: PW },
+      { email: ` ${ADMIN_EMAIL}`, password: PW },
+      { email: `${ADMIN_EMAIL} `, password: PW },
+      { email: 'intern.kalika@herocycles.com.evil.test', password: PW },
+      { email: 'intern.kalika@example.com', password: PW },
+      { email: '', password: PW },
+      { email: ADMIN_EMAIL, password: '' },
+      { email: ADMIN_EMAIL, password: 'wrong' },
+      { email: ADMIN_EMAIL, password: `${PW} ` },
+      { email: 'other@herocycles.com', password: 'wrong' },
+      { password: PW },
+      { email: ADMIN_EMAIL },
+      { secret: PW }, // the old shape: password alone
+      { email: [ADMIN_EMAIL], password: PW },
+      { email: ADMIN_EMAIL, password: [PW] },
+      { email: { toString: () => ADMIN_EMAIL }, password: PW },
+    ];
+    for (let i = 0; i < bad.length; i++) {
+      const res = await doLogin(bad[i], `192.0.2.${100 + i}`);
+      expect([400, 401], JSON.stringify(bad[i])).toContain(res.status);
+      expect(res.headers.get('set-cookie')).toBeNull();
+      expect(JSON.stringify(await res.json())).not.toContain(PW);
+    }
+    const ok = await doLogin({ email: ADMIN_EMAIL, password: PW });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ admin: true, email: ADMIN_EMAIL });
+  });
+  it('gives the same answer for a wrong email and a wrong password (no account probing)', async () => {
+    const a = await (await doLogin({ email: 'nobody@herocycles.com', password: PW }, '192.0.2.1')).json();
+    const b = await (await doLogin({ email: ADMIN_EMAIL, password: 'nope' }, '192.0.2.2')).json();
+    expect(a).toEqual(b);
+  });
+  it('has no registration or account-management route', () => {
+    for (const f of fs.readdirSync(path.join(__dirname, '../server/handlers'))) expect(f).not.toMatch(/regist|signup|invite|account|user/i);
+    for (const f of fs.readdirSync(path.join(__dirname, '../../api/admin'))) expect(f).not.toMatch(/regist|signup|invite|account|user/i);
+  });
+  it('a correctly signed session that is not bound to the administrator is refused', async () => {
+    const real = await signIn();
+    const sess = JSON.parse(Buffer.from(real.split('.')[0], 'base64url').toString());
+    expect(sess.sub).toBe(ADMIN_EMAIL);
+    const cfg = readConfig({ ...ENV, CRM_STORE_DIR: '' });
+    const secret = cfg.sessionSecret as string;
+    const sign = (payload: object) => {
+      const b = Buffer.from(JSON.stringify(payload)).toString('base64url');
+      return `${b}.${crypto.createHmac('sha256', secret).update(b).digest('base64url')}`;
+    };
+    // control: with the right identity this very signing is accepted, so the refusals below are about the identity alone
+    expect((await versionsH.GET(req('GET', '/api/admin/versions', { cookie: sign(sess) }))).status).toBe(200);
+    for (const p of [{ ...sess, sub: 'other@herocycles.com' }, { ...sess, sub: undefined }, { sid: sess.sid, iat: sess.iat, exp: sess.exp }]) {
+      expect((await versionsH.GET(req('GET', '/api/admin/versions', { cookie: sign(p) }))).status).toBe(401);
+    }
+  });
+  it('every protected endpoint refuses a public caller on every method (401), including with the CSRF header', async () => {
+    const eps: Array<[string, Record<string, (r: Request) => Promise<Response>>]> = [
+      ['/api/admin/stage?upload=a&part=0', stage as never],
+      ['/api/admin/publish', publishH as never],
+      ['/api/admin/rollback', rollbackH as never],
+      ['/api/admin/versions', versionsH as never],
+    ];
+    for (const [url, mod] of eps) {
+      for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+        const h = mod[m];
+        expect(typeof h, `${url} ${m} is exported`).toBe('function');
+        for (const withCsrf of [true, false]) {
+          const res = await h(req(m, url, { admin: withCsrf, body: m === 'GET' ? undefined : { baseVersion: null, datasets: [], to: 'x' } }));
+          expect([401, 403], `${m} ${url} csrf=${withCsrf}`).toContain(res.status);
+        }
+      }
+    }
+  });
+  it('a logged-out, expired, or forged session is refused on every protected endpoint', async () => {
+    const c = await signIn();
+    const jar: Record<string, string> = { live: c };
+    await logout.POST(req('POST', '/api/admin/logout', { cookie: c }));
+    jar.loggedOut = c;
+    jar.garbage = 'x.y';
+    for (const [name, cookie] of Object.entries(jar)) {
+      for (const [url, h, m] of [
+        ['/api/admin/versions', versionsH.GET, 'GET'],
+        ['/api/admin/publish', publishH.POST, 'POST'],
+        ['/api/admin/rollback', rollbackH.POST, 'POST'],
+        ['/api/admin/stage?upload=a&part=0', stage.POST, 'POST'],
+      ] as const) {
+        const res = await h(req(m, url, { cookie, body: m === 'GET' ? undefined : { baseVersion: null, datasets: [], to: 'x' } }));
+        expect(res.status, `${name} ${m} ${url}`).toBe(401);
+      }
+    }
+  });
+  it('an unconfigured deployment refuses protected calls with 401 and never reveals what is missing', async () => {
+    setContext(ctxWith(store, { CRM_SESSION_SECRET: '', CRM_ADMIN_SECRET: '' }));
+    for (const res of [await versionsH.GET(req('GET', '/api/admin/versions')), await publishH.POST(req('POST', '/api/admin/publish', { body: {} }))]) {
+      expect(res.status).toBe(401);
+      expect(JSON.stringify(await res.json())).not.toMatch(/CRM_|secret|pepper|blob/i);
+    }
+  });
+  it('the public read endpoints stay open without any sign-in', async () => {
+    expect((await snapshotH.GET(req('GET', '/api/snapshot'))).status).toBe(200);
+    expect((await healthH.GET(req('GET', '/api/health'))).status).toBe(200);
+    expect((await session.GET(req('GET', '/api/admin/session'))).status).toBe(200);
+  });
+  it('the administrator is let through the same endpoints (control case)', async () => {
+    const c = await signIn();
+    expect((await versionsH.GET(req('GET', '/api/admin/versions', { cookie: c }))).status).toBe(200);
+    expect((await versionsH.DELETE(req('DELETE', '/api/admin/versions', { cookie: c }))).status).toBe(405);
+  });
+  it('the password and the session secret never appear in a response, header or log line', async () => {
+    const logs: string[] = [];
+    const spies = (['log', 'warn', 'error', 'info'] as const).map((k) => {
+      const orig = console[k];
+      console[k] = (...a: unknown[]) => { logs.push(a.map(String).join(' ')); };
+      return () => { console[k] = orig; };
+    });
+    try {
+      const outs: Response[] = [await doLogin({ email: ADMIN_EMAIL, password: 'wrong-x' }), await doLogin({ email: ADMIN_EMAIL, password: PW }, '192.0.2.77')];
+      const c = cookieOf(outs[1]);
+      outs.push(await session.GET(req('GET', '/api/admin/session', { cookie: c })), await versionsH.GET(req('GET', '/api/admin/versions', { cookie: c })));
+      for (const r of outs) {
+        const text = JSON.stringify([...r.headers.entries()]) + (await r.text());
+        expect(text).not.toContain(PW);
+        expect(text).not.toContain(ENV.CRM_SESSION_SECRET);
+      }
+    } finally {
+      spies.forEach((u) => u());
+    }
+    expect(logs.join('\n')).not.toContain(PW);
+    expect(logs.join('\n')).not.toContain('wrong-x');
   });
 });

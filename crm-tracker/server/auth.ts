@@ -7,7 +7,7 @@
 import crypto from 'node:crypto';
 import { HttpError, clientIp } from './http.js';
 import { PreconditionFailed } from './store.js';
-import { adminProblems, blobProblems, paths, type Context } from './config.js';
+import { ADMIN_EMAIL, adminProblems, blobProblems, paths, type ServerConfig, type Context } from './config.js';
 
 export const COOKIE = 'crm_admin';
 export const CSRF_HEADER = 'x-crm-admin';
@@ -22,12 +22,24 @@ export function safeEqual(a: string, b: string): boolean {
 
 export interface SessionPayload {
   sid: string;
+  /** the account the session belongs to: always the one administrator */
+  sub: string;
   iat: number;
   exp: number;
 }
 
+/**
+ * Both the email and the password must match, each compared in constant time and both always evaluated, so neither the time taken
+ * nor the failure message says which of the two was wrong. The email must match exactly (no case folding, no trimming).
+ */
+export function checkAdminCredentials(cfg: Pick<ServerConfig, 'adminSecret'>, email: unknown, password: unknown): boolean {
+  const emailOk = typeof email === 'string' && email.length <= 320 && safeEqual(email, ADMIN_EMAIL);
+  const passwordOk = typeof password === 'string' && password.length > 0 && password.length <= 512 && !!cfg.adminSecret && safeEqual(password, cfg.adminSecret);
+  return emailOk && passwordOk;
+}
+
 export function createSessionToken(secret: string, nowMs: number, hours: number): { token: string; payload: SessionPayload } {
-  const payload: SessionPayload = { sid: crypto.randomBytes(16).toString('hex'), iat: Math.floor(nowMs / 1000), exp: Math.floor(nowMs / 1000) + Math.round(hours * 3600) };
+  const payload: SessionPayload = { sid: crypto.randomBytes(16).toString('hex'), sub: ADMIN_EMAIL, iat: Math.floor(nowMs / 1000), exp: Math.floor(nowMs / 1000) + Math.round(hours * 3600) };
   const body = b64u(JSON.stringify(payload));
   return { token: `${body}.${b64u(hmac(secret, body))}`, payload };
 }
@@ -47,6 +59,7 @@ export function verifySessionToken(secret: string, token: string | undefined, no
   try {
     const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionPayload;
     if (typeof p.sid !== 'string' || !/^[0-9a-f]{32}$/.test(p.sid) || typeof p.exp !== 'number' || p.exp * 1000 <= nowMs) return null;
+    if (p.sub !== ADMIN_EMAIL) return null; // a token that is not for the administrator (or predates this field) is worth nothing
     return p;
   } catch {
     return null;
@@ -88,10 +101,15 @@ export function assertSameOrigin(request: Request) {
   }
 }
 
+function configProblems(ctx: Context): string[] {
+  return [...adminProblems(ctx.cfg), ...(ctx.store ? [] : blobProblems(ctx.cfg))];
+}
+
+/** Sign-in on a deployment that is not set up says so (it is not a data operation). */
 export function assertAdminConfigured(ctx: Context) {
-  const problems = adminProblems(ctx.cfg);
-  if (problems.length || !ctx.store) {
-    console.warn('[crm-api] publishing is not configured; missing:', [...problems, ...(ctx.store ? [] : blobProblems(ctx.cfg))].join('; ')); // names only, in the server log
+  const problems = configProblems(ctx);
+  if (problems.length) {
+    console.warn('[crm-api] publishing is not configured; missing:', problems.join('; ')); // names only, in the server log
     throw new HttpError(503, 'not_configured', 'Publishing is not set up on this deployment.');
   }
 }
@@ -107,11 +125,17 @@ function throttle(sid: string, nowMs: number) {
 
 /** Verifies the admin cookie (and, for non-GET calls, the CSRF rules). Returns the session. */
 export async function requireAdmin(ctx: Context, request: Request): Promise<SessionPayload> {
-  assertAdminConfigured(ctx);
+  // A deployment that is not set up has no administrator: every protected call is simply "not signed in" (401), whoever asks,
+  // and the public learns nothing about the configuration (the missing names go to the server log).
+  const problems = configProblems(ctx);
+  if (problems.length) {
+    console.warn('[crm-api] protected call refused, publishing is not configured; missing:', problems.join('; '));
+    throw new HttpError(401, 'unauthorized', 'Sign in as the administrator.');
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD') assertSameOrigin(request);
   const token = parseCookies(request.headers.get('cookie'))[COOKIE];
   const session = verifySessionToken(ctx.cfg.sessionSecret!, token, ctx.now());
-  if (!session) throw new HttpError(401, 'unauthorized', 'Sign in as an administrator.');
+  if (!session) throw new HttpError(401, 'unauthorized', 'Sign in as the administrator.');
   if (await ctx.store!.head(paths(ctx.cfg).revoked(session.sid))) throw new HttpError(401, 'unauthorized', 'This session has ended. Sign in again.');
   throttle(session.sid, ctx.now());
   return session;

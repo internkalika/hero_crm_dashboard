@@ -25,6 +25,12 @@ export function normaliseStoreId(id: string): string {
   return id.trim().replace(/^store_/i, '').toLowerCase();
 }
 
+/**
+ * The only account that may administer the data. It is fixed in code on purpose: there is no registration, no list of admins and no
+ * setting that could add another one. The password is CRM_ADMIN_SECRET (the existing variable).
+ */
+export const ADMIN_EMAIL = 'intern.kalika@herocycles.com';
+
 export const MIN_ADMIN_SECRET = 16;
 export const MIN_SERVER_SECRET = 32;
 

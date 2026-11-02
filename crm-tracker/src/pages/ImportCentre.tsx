@@ -4,6 +4,8 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Check, FolderUp, FileUp, UploadCl
 import clsx from 'clsx';
 import { useData } from '../state/DataContext';
 import { Badge, Card, Notice, PageHeader, Spinner } from '../components/ui';
+import { useAdmin } from '../state/AdminContext';
+import { AdminLogin } from '../components/AdminLogin';
 import { SOURCES, SOURCE_TYPES } from '../lib/ingest/sources';
 import type { SourceType } from '../lib/types';
 import { ImportItem, commitItems, itemsFromAnalyses, effectiveMapping, missingForItem, normalizeItem, planItems, sheetColumns, batchConflicts, CommitResult } from '../lib/ingest/session';
@@ -50,7 +52,7 @@ function SamplePreview({ sheet }: { sheet: SheetPreview }) {
   );
 }
 
-export default function ImportCentre() {
+function ImportWizard() {
   const { data, client, reload, published } = useData();
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(0);
@@ -497,4 +499,24 @@ function topIssues(it: ImportItem): Array<[string, number, string]> {
     by.set(i.code, e);
   }
   return [...by.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 8).map(([c, e]) => [c, e.n, e.sev]);
+}
+
+/** Data Import is visible to everyone, but only the administrator (or a copy without a server) can use it. */
+export default function ImportCentre() {
+  const { admin, canUseDataTools } = useAdmin();
+  if (admin.phase === 'loading') return <Spinner label="Checking access" />;
+  if (canUseDataTools) return <ImportWizard />;
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Data Import" />
+      <Notice tone="neutral" title="Data Import is restricted to the administrator">
+        Everyone can view the dashboards. Importing, validating, replacing, merging and publishing data need the administrator sign-in.
+      </Notice>
+      {admin.phase === 'unavailable' ? (
+        <Notice tone="warn" title="Sign-in is temporarily unavailable">The server could not be reached. Try again in a moment.</Notice>
+      ) : (
+        <AdminLogin />
+      )}
+    </div>
+  );
 }

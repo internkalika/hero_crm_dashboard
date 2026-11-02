@@ -1,7 +1,7 @@
 // Data Management: what is published, and (for a signed-in administrator) publishing, history and rollback.
 // Everyone can see the status; nothing here changes anything unless the server accepts the administrator's session.
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { History, LogOut, RefreshCw, ShieldCheck, Trash2, Undo2, UploadCloud } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { History, LogOut, RefreshCw, Trash2, Undo2, UploadCloud } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useData } from '../state/DataContext';
 import { Badge, Card, Confirm, Modal, Notice, PageHeader, SectionTitle, Spinner } from '../components/ui';
@@ -10,7 +10,9 @@ import { SOURCES } from '../lib/ingest/sources';
 import { formatCell, fInt } from '../lib/export/format';
 import type { Col } from '../lib/export/excel';
 import type { DatasetChange, PublishedDataset, SnapshotStatus, VersionManifest, VersionSummary } from '../lib/publish/types';
-import { ApiError, AdminSession, adminLogin, adminLogout, adminManifest, adminRollback, adminSession, adminVersions, fetchStatus } from '../lib/sync/api';
+import { ApiError, adminManifest, adminRollback, adminVersions, fetchStatus } from '../lib/sync/api';
+import { useAdmin } from '../state/AdminContext';
+import { AdminLogin } from '../components/AdminLogin';
 import { PublishPreview, PublishProgress, discardLocalChange, previewPublish, publishLocal } from '../lib/sync/published';
 import { LocalChange, localChanges } from '../lib/sync/state';
 
@@ -40,11 +42,11 @@ function explain(e: unknown): string {
 
 export default function DataManagement() {
   const { data, reload, published, syncNow } = useData();
-  const [sess, setSess] = useState<AdminSession | null>(null);
+  const { admin, signOut: endSession } = useAdmin();
+  const isAdmin = admin.phase === 'admin';
   const [status, setStatus] = useState<SnapshotStatus | null | undefined>(undefined);
   const [changes, setChanges] = useState<LocalChange[]>([]);
   const [hist, setHist] = useState<{ current: string | null; versions: VersionSummary[] } | null>(null);
-  const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -59,13 +61,13 @@ export default function DataManagement() {
   const [detail, setDetail] = useState<VersionManifest | null>(null);
 
   const refresh = useCallback(async () => {
-    const [st, ch, se] = await Promise.all([fetchStatus(), localChanges().catch(() => []), adminSession().catch(() => null)]);
+    const [st, ch] = await Promise.all([fetchStatus(), localChanges().catch(() => [])]);
     setStatus(st);
     setChanges(ch);
-    setSess(se);
-    if (se?.admin) setHist(await adminVersions().catch(() => null));
+    // the version history is for the administrator only (the server refuses everybody else as well)
+    if (isAdmin) setHist(await adminVersions().catch(() => null));
     else setHist(null);
-  }, []);
+  }, [isAdmin]);
   useEffect(() => {
     void refresh();
   }, [refresh, data.version]);
@@ -78,21 +80,13 @@ export default function DataManagement() {
       await fn();
     } catch (e) {
       setError(explain(e));
-      if (e instanceof ApiError && e.status === 401) setSess((s) => (s ? { ...s, admin: false } : s));
+      if (e instanceof ApiError && e.status === 401) void endSession(); // the session ended: look again and close the tools
     } finally {
       setBusy(null);
     }
   };
 
-  const signIn = (ev: FormEvent) => {
-    ev.preventDefault();
-    void run('login', async () => {
-      await adminLogin(secret);
-      setSecret('');
-      await refresh();
-    });
-  };
-  const signOut = () => run('logout', async () => { await adminLogout(); await refresh(); });
+  const signOut = () => run('logout', async () => { await endSession(); setHist(null); setReview(null); });
 
   const openReview = () =>
     run('review', async () => {
@@ -127,7 +121,7 @@ export default function DataManagement() {
     { id: 'rec', header: 'Records', value: (d) => d.validCount, format: 'int' },
     { id: 'at', header: 'Imported', value: (d) => d.importedAt, format: 'datetime' },
     { id: 'origin', header: 'Data comes from', value: (d) => origin(d.id).text, render: (d) => <Badge tone={origin(d.id).tone}>{origin(d.id).text}</Badge> },
-    ...(sess?.admin
+    ...(isAdmin
       ? [{ id: 'act', header: '', value: () => null, noExport: true, render: (d: (typeof data.datasets)[number]) => { const p = status?.version?.datasets.find((x) => x.id === d.id); return p ? <button className="btn btn-sm" aria-label={`Remove ${label(d.id)} from the published data`} onClick={() => setUnpublish(p)}><Trash2 size={12} /> Unpublish</button> : null; } } as Col<(typeof data.datasets)[number]>]
       : []),
   ];
@@ -151,7 +145,7 @@ export default function DataManagement() {
   ];
 
   const lastPub = status?.publishedAt ?? published.publishedAt;
-  const configured = status?.configured ?? sess?.configured ?? false;
+  const configured = admin.phase === 'admin' || (admin.phase === 'public' ? admin.configured : status?.configured ?? false);
 
   return (
     <div className="space-y-4">
@@ -183,29 +177,29 @@ export default function DataManagement() {
       {status === null && <Notice tone="neutral" title="Publishing is not available here">This copy of the dashboard has no publishing service (for example it is the single HTML file opened from disk). Importing files still works in this browser.</Notice>}
 
       <SectionTitle>Administrator</SectionTitle>
-      {sess === null || status === undefined ? <Spinner label="Checking" /> : !configured ? (
-        <Notice tone="neutral" title="Publishing is not set up on this deployment">An administrator has to connect a private Blob store and set the administrator secrets (see docs/PUBLISHING.md). Viewers are not affected: they keep seeing the embedded data.</Notice>
-      ) : !sess.admin ? (
-        <Card>
-          <form onSubmit={signIn} className="flex max-w-xl flex-wrap items-end gap-3" aria-label="Administrator sign-in">
-            <div className="min-w-[16rem] flex-1">
-              <label className="label" htmlFor="admin-secret">Administrator secret</label>
-              <input id="admin-secret" name="admin-secret" type="password" autoComplete="off" className="input mt-1 w-full" value={secret} onChange={(e) => setSecret(e.target.value)} />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={!secret || busy === 'login'}><ShieldCheck size={14} /> Sign in</button>
-          </form>
-          <p className="mt-2 text-xs text-ink-3">Only administrators can publish. Viewers do not need to sign in.</p>
-        </Card>
+      {admin.phase === 'loading' || status === undefined ? (
+        <Spinner label="Checking" />
+      ) : admin.phase === 'no-backend' ? (
+        <Notice tone="neutral" title="Data tools are not shared on this copy">This copy of the dashboard has no publishing service, so importing works in this browser only.</Notice>
+      ) : admin.phase === 'unavailable' ? (
+        <Notice tone="warn" title="Sign-in is temporarily unavailable">The server could not be reached, so the data tools stay closed. The dashboards still work.</Notice>
+      ) : admin.phase === 'public' && !admin.configured ? (
+        <Notice tone="neutral" title="Publishing is not set up on this deployment">The administrator has to connect the Blob store and set the administrator secrets (see docs/PUBLISHING.md). The dashboards are not affected.</Notice>
+      ) : admin.phase === 'public' ? (
+        <>
+          <Notice tone="neutral" title="The data tools are for the administrator">Everyone can view the dashboards. Importing, validating, replacing, merging, publishing, the version history and restoring are available after signing in.</Notice>
+          <AdminLogin compact />
+        </>
       ) : (
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm"><Badge tone="good">Signed in as administrator</Badge><span className="text-ink-3">until {dt(sess.expiresAt)}</span></div>
+            <div className="flex items-center gap-2 text-sm"><Badge tone="good">Signed in as the administrator</Badge><span className="text-ink-2">{admin.email}</span><span className="text-ink-3">until {dt(admin.expiresAt)}</span></div>
             <button className="btn btn-sm" onClick={() => void signOut()} disabled={busy === 'logout'}><LogOut size={12} /> Sign out</button>
           </div>
         </Card>
       )}
 
-      {sess?.admin && configured && (
+      {isAdmin && configured && (
         <>
           <SectionTitle right={<Link className="text-sm text-hero-600 underline" to="/import">Import files →</Link>}>Changes waiting to be published</SectionTitle>
           {changes.length === 0 ? (
@@ -234,10 +228,14 @@ export default function DataManagement() {
         </>
       )}
 
-      <SectionTitle>Datasets in use</SectionTitle>
-      {data.datasets.length === 0 ? <Notice tone="neutral" title="No data loaded" /> : <DataTable title={`Datasets in use (${data.datasets.length})`} rows={data.datasets} columns={dsCols} getRowId={(d) => d.id} exportName="Datasets_in_use" pageSize={25} />}
+      {isAdmin && (
+        <>
+        <SectionTitle>Datasets in use</SectionTitle>
+        {data.datasets.length === 0 ? <Notice tone="neutral" title="No data loaded" /> : <DataTable title={`Datasets in use (${data.datasets.length})`} rows={data.datasets} columns={dsCols} getRowId={(d) => d.id} exportName="Datasets_in_use" pageSize={25} />}
+        </>
+      )}
 
-      {sess?.admin && hist && (
+      {isAdmin && hist && (
         <>
           <SectionTitle>Version history</SectionTitle>
           <DataTable title={`Published versions (${hist.versions.length})`} rows={hist.versions} columns={histCols} getRowId={(v) => v.versionId} exportName="Published_versions" pageSize={10} />

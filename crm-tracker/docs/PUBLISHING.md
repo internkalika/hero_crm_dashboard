@@ -47,7 +47,10 @@ Other numeric cells are not scanned (an order value is not a phone number). The 
 
 | Control | Where |
 |---|---|
-| Shared administrator secret, compared in constant time; never stored, logged or returned | `server/auth.ts` |
+| One administrator: the fixed email `intern.kalika@herocycles.com` (a constant in `server/config.ts`, no setting, no list, no registration) **and** the existing `CRM_ADMIN_SECRET` as the password; both are compared in constant time, both must match, the answer is the same for a wrong email and a wrong password; nothing is stored, logged or returned | `server/auth.ts`, `server/handlers/login.ts` |
+| The session cookie carries the administrator identity (`sub`) inside its signature; a validly signed cookie for any other identity is refused | `verifySessionToken` |
+| Every `/api/admin/*` endpoint answers **every** HTTP method (GET, POST, PUT, PATCH, DELETE) through the same check: without the administrator's session it is `401` (`403` for a failed CSRF check), whatever the method; a deployment that is not configured answers `401` too | `requireAdmin`, `handlers/denied.ts` |
+| The screens: everybody can open every dashboard and sees the *Data Import* and *Data Management* entries; for anyone but the administrator those pages show only a sign-in form (no file chooser, no version history). This is convenience only: the server decides | `src/state/AdminContext.tsx`, `ImportCentre.tsx`, `DataManagement.tsx` |
 | Session: signed (HMAC-SHA-256, separate `CRM_SESSION_SECRET`), `HttpOnly; SameSite=Strict; Path=/api; Secure` (https), 8 h by default | `server/auth.ts` |
 | Logout revokes the session id in the store, so a copied cookie stops working | `server/handlers/logout.ts` |
 | State-changing calls need the cookie **and** `X-CRM-Admin: 1` **and** a same-origin request (`Origin`, `Sec-Fetch-Site`) | `assertSameOrigin` |
@@ -57,7 +60,7 @@ Other numeric cells are not scanned (an order value is not a phone number). The 
 | Public endpoints return no store URLs, no credentials, nothing but sanitized datasets of the current version; an unauthenticated caller is not told which settings are missing (the names go to the server log) | `server/handlers/snapshot.ts`, `dataset.ts` |
 | CSP, HSTS, frame and referrer headers | `vercel.json` |
 
-**Limits to know.** Address-based throttling cannot stop a distributed attack: add a Vercel Firewall rate-limit rule for `/api/admin/login` (for example 10 per minute per IP) for a hard guarantee. A shared secret has no per-person audit trail: the history records *when* and the note, not *who*. Dataset blobs are never deleted automatically (history and rollback depend on them); remove old ones in the Blob dashboard if storage matters.
+**Limits to know.** Address-based throttling cannot stop a distributed attack: add a Vercel Firewall rate-limit rule for `/api/admin/login` (for example 10 per minute per IP) for a hard guarantee. There is a single administrator account and no per-person audit trail: the history records *when* and the note, not *who*. Dataset blobs are never deleted automatically (history and rollback depend on them); remove old ones in the Blob dashboard if storage matters.
 
 ## Setting it up on the existing Vercel project (`hero_crm_dashboard`), Preview only
 
@@ -99,7 +102,7 @@ If a dashboard field shows an "Override" switch that is on, `vercel.json` still 
 |---|---|---|
 | `BLOB_STORE_ID` | Preview and Production (already created by connecting the store) | the connected store; nothing to type |
 | `BLOB_WEBHOOK_PUBLIC_KEY` | (created, not used) | this feature has no Blob webhooks; leave it in place |
-| `CRM_ADMIN_SECRET` | Preview (later Production) | the shared administrator secret, ≥ 16 characters (`openssl rand -base64 24`) |
+| `CRM_ADMIN_SECRET` | Preview (later Production) | the administrator password (used together with the one permitted email `intern.kalika@herocycles.com`), ≥ 16 characters (`openssl rand -base64 24`) |
 | `CRM_SESSION_SECRET` | Preview (later Production) | ≥ 32 random characters (`openssl rand -base64 48`) |
 | `CRM_PUBLISH_PEPPER` | Preview (later Production) | ≥ 32 random characters, different from the other two. **Never change it afterwards** (it keeps the anonymous tokens repeatable). Use a different value in Production than in Preview |
 | `CRM_BLOB_PREFIX` | optional | default `crm-tracker/<VERCEL_ENV>` (see above) |
@@ -122,12 +125,16 @@ Production builds `main`, which does not contain this feature, so adding variabl
 | Deployment → Functions tab | ten functions: `/api/health`, `/api/snapshot`, `/api/dataset`, `/api/admin/session`, `/api/admin/versions`, `/api/admin/login`, `/api/admin/logout`, `/api/admin/stage`, `/api/admin/publish`, `/api/admin/rollback` |
 | `GET $P/api/health` | `{"ok":true,"service":"crm-tracker-api","commit":"<first 7 characters of the deployed commit>","environment":"preview"}`: proves the functions are deployed and which commit answers (no configuration or secrets in it) |
 | `GET $P/api/snapshot` | `{"configured":true,"version":null,"publishedAt":null}` with the secrets and the connected store in place (`"configured":false` before). A `500` here means the store could not be reached: check that OIDC federation is enabled and that the store is connected to Preview |
-| `GET $P/api/admin/session` | `{"configured":true,"admin":false,"expiresAt":null}` |
+| `GET $P/api/admin/session` | `{"configured":true,"admin":false,"expiresAt":null}` (no email) |
 | `GET $P/api/admin/versions` (no cookie) | `401` |
 | `GET $P/api/dataset?sha=` + 64 zeros | `404` |
 | `GET $P/api/admin/login` | `405` |
 | `$P/`, `$P/overview`, `$P/datasense/employees`, `$P/admin` typed into the address bar | each loads the dashboard (single-page-app rewrite), no 404 |
-| `$P/admin` | "Publishing is not available here" is **not** shown; the sign-in form is |
+| `$P/admin` and `$P/import` in a private window | a sign-in form with **Email** and **Password**; no file chooser, no version history; the menu entries stay visible |
+| Sign in with another email and the right password; with `intern.kalika@herocycles.com` and a wrong password | both: "That email or password is not correct." |
+| Sign in with `intern.kalika@herocycles.com` and the value of `CRM_ADMIN_SECRET` | "Signed in as the administrator"; Data Import and Data Management open |
+| Sign out, press Back, reload `$P/import` | the sign-in form again |
+| Browser console in a private window: `await fetch('/api/admin/publish',{method:'POST',headers:{'X-CRM-Admin':'1','Content-Type':'application/json'},body:'{}'}).then(r=>r.status)`; repeat with `/api/admin/versions` (GET), `/api/admin/rollback`, `/api/admin/stage?upload=a&part=0`, and with PUT/PATCH/DELETE | `401` every time |
 | Response headers on any page | `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY` |
 | Sign in, import a Usage Report workbook, publish, open the Preview in a second browser | the second browser shows the new data within about a minute, without reloading |
 

@@ -1,5 +1,5 @@
 import { COOKIE, parseCookies, verifySessionToken } from '../auth.js';
-import { adminProblems, getContext, paths } from '../config.js';
+import { ADMIN_EMAIL, adminProblems, getContext, paths } from '../config.js';
 import { guard, json } from '../http.js';
 
 /** Who am I? Never fails: the page uses it to decide whether to show the sign-in form or the admin tools. */
@@ -16,5 +16,5 @@ export const GET = guard(async (request) => {
       expiresAt = new Date(s.exp * 1000).toISOString();
     }
   }
-  return json({ configured, admin, expiresAt });
+  return json({ configured, admin, expiresAt, ...(admin ? { email: ADMIN_EMAIL } : {}) });
 });

@@ -40,11 +40,15 @@ describe('root api shims (the functions Vercel deploys)', () => {
     expect(walk('api').sort()).toEqual(Object.keys(ENDPOINTS).map((r) => `${r.slice(1)}.ts`).sort());
   });
   for (const [route, [mod, method, handler]] of Object.entries(ENDPOINTS)) {
-    it(`${route}: exposes only ${method}, from crm-tracker/server/handlers/${handler}`, () => {
+    it(`${route}: exposes ${method}, from crm-tracker/server/handlers/${handler}`, () => {
       const src = read(`${route.slice(1)}.ts`);
-      const m = /export \{ (\w+) \} from '([^']+)';/.exec(src);
+      const m = /export \{ ([\w, ]+) \} from '([^']+)';/.exec(src);
       expect(m, 'a single re-export').not.toBeNull();
-      expect(m![1]).toBe(method);
+      const names = m![1].split(',').map((s) => s.trim());
+      // admin endpoints also export the other methods, which answer 401 (or 405 to the administrator) so nothing is left unguarded
+      expect(names).toContain(method);
+      if (route.startsWith('/api/admin/') && !['/api/admin/login', '/api/admin/logout', '/api/admin/session'].includes(route)) expect(names.sort()).toEqual(['DELETE', 'GET', 'PATCH', 'POST', 'PUT']);
+      else expect(names).toEqual([method]);
       const target = path.resolve(path.dirname(path.join(REPO, `${route.slice(1)}.ts`)), m![2].replace(/\.js$/, '.ts'));
       expect(target).toBe(path.join(REPO, `crm-tracker/server/handlers/${handler}.ts`));
       expect(fs.existsSync(target)).toBe(true);

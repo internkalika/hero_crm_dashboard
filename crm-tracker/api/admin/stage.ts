@@ -1,1 +1,1 @@
-export { POST } from '../../server/handlers/stage.js';
+export { GET, POST, PUT, PATCH, DELETE } from '../../server/handlers/stage.js';

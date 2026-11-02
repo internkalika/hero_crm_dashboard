@@ -1,1 +1,1 @@
-export { POST } from '../../server/handlers/publish.js';
+export { GET, POST, PUT, PATCH, DELETE } from '../../server/handlers/publish.js';
