@@ -1,0 +1,210 @@
+[
+ {
+  "q": "How do Dealer App and DataSense compare for the 11 dealers?",
+  "expect": [
+   "29",
+   "34"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many valid Dealer App orders were there?",
+  "expect": [
+   "29"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the Dealer App order value for the 11 dealers?",
+  "expect": [
+   "45.55",
+   "4,54,965"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the DataSense order value for the 11 dealers?",
+  "expect": [
+   "48.47",
+   "48,46,929"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the Dealer App rejection rate?",
+  "expect": [
+   "14.7"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the DataSense rejection rate for those dealers?",
+  "expect": [
+   "5.4"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the average order value on the Dealer App?",
+  "expect": [
+   "1,57,068",
+   "1.57"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How is Jitesh Traders doing on both channels?",
+  "expect": [
+   "12"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many Dealer App orders did Kamala Cycle Mart place in September and October?",
+  "expect": [
+   "3"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "Which dealer has the highest Dealer App order value?",
+  "expect": [
+   "Jitesh"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "Show the trend of valid orders by month.",
+  "expect": [
+   "Apr"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the trend of rejection rate?",
+  "expect": [
+   "Sep"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What are the top 3 models on the Dealer App by value?",
+  "expect": [
+   "RIDE ON"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is MBD for September and October?",
+  "expect": [
+   "7.4",
+   "11.6"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many Bizom issues are open?",
+  "expect": [
+   "open"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many issues are overdue in the tracker?",
+  "expect": [
+   "11"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many DataSense issues are there?",
+  "expect": [
+   "14"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "List the P1 issues that are open.",
+  "expect": [
+   "P1"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many orders does the Usage Report show for April to October?",
+  "expect": [
+   "29,679",
+   "29679"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the SFA share in the Usage Report?",
+  "expect": [
+   "75.5"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many active employees are in the Usage Report?",
+  "expect": [
+   "87"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many people are active in both Bizom and DataSense?",
+  "expect": [
+   "30"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many DataSense complaints are there in total?",
+  "expect": [
+   "6,702",
+   "6702"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "How many DataSense complaints are not closed?",
+  "expect": [
+   "3,692",
+   "3692"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What was DataSense order value in the whole network for April to October?",
+  "expect": [
+   "Cr"
+  ],
+  "no_data": false
+ },
+ {
+  "q": "What is the profit margin of the Dealer App?",
+  "expect": [],
+  "no_data": true
+ },
+ {
+  "q": "What is the cost price of a Ride On cycle?",
+  "expect": [],
+  "no_data": true
+ },
+ {
+  "q": "How many Dealer App orders were there in August?",
+  "expect": [],
+  "no_data": true
+ },
+ {
+  "q": "Which DataSense SKU sells the most?",
+  "expect": [],
+  "no_data": true
+ },
+ {
+  "q": "What is the weather in Delhi today?",
+  "expect": [],
+  "no_data": true
+ }
+]
