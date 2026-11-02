@@ -18,7 +18,8 @@ publish from **Data Management**. Everyone else sees the new data within about a
 
 * **The store is private.** Only the server holds `BLOB_READ_WRITE_TOKEN`. Viewers get data through the two read-only endpoints, which stream from the store.
 * **Viewers keep working without the service**: the page embeds a sanitized snapshot, used until a publish succeeds and whenever the API is unreachable. Published datasets override embedded ones with the same id; the others stay.
-* **An unpublished local import is never overwritten** by a sync (it is listed in Data Management with Publish / Discard). A viewer's own removal of a dataset counts as a pending change in the same way.
+* **First visit after this feature arrives:** whatever a browser already holds counts as published-clean, so a viewer receives updates. An administrator who imported files in an earlier build and has not published them should publish them *before* opening the new version, or the first sync replaces those datasets with the published copy.
+* **An unpublished local import is never overwritten** by a sync (the check is repeated right before each dataset is written) (it is listed in Data Management with Publish / Discard). A viewer's own removal of a dataset counts as a pending change in the same way.
 
 ## What a publish does
 
@@ -27,7 +28,7 @@ publish from **Data Management**. Everyone else sees the new data within about a
 3. It stores each dataset under its SHA-256 (identical content is stored once and shared between versions), computes inserted / updated / removed / unchanged against the version it replaces, writes the manifest, then **moves `current.json` last with a compare-and-swap** on its ETag.
 4. A publish carries the version it was reviewed against. If anyone published in between the server answers `409` and changes nothing.
 
-Rollback publishes an older version again as a **new** version (history is linear and never rewritten). Data that a rollback replaced is no longer served.
+Rollback publishes an older version again as a **new** version (history is linear and never rewritten). Only versions that were really live (the current one and its ancestors) are listed or restorable: a publish that lost a race leaves no version behind. Data that a rollback replaced is no longer served: the dataset endpoint checks the current version on every request and is never cached for long (browsers revalidate, Vercel's CDN keeps a copy for a minute). Copies a viewer already downloaded stay in that viewer's browser until their next sync.
 
 ### What the sanitizer changes (checked on the real 18 datasets)
 
@@ -35,11 +36,12 @@ Rollback publishes an older version again as a **new** version (history is linea
 |---|---|
 | raw source rows | never published |
 | Hero Smiles `key` / `entityKey` of *unverified* members contained the **full mobile number** (10 rows in 5 snapshots) | replaced by a one-way token (HMAC-SHA-256 with `CRM_PUBLISH_PEPPER`). Those rows are never joined to other data, so no figure changes. The masked display field (`91••••••3087`) is untouched |
-| mobile numbers / e-mail addresses in free text (1 complaint description) | replaced by `[removed]` |
-| code fields (…Id, …Code, …Key, …No, …Number, …Ref, ticket) | left alone: they join datasets |
+| mobile numbers / e-mail addresses in free text (1 complaint description) | replaced by `[removed]`. Recognised: +91 / 91 / 0 prefixes, spaces, dots or hyphens between digits, numbers glued to words (`Ramesh-98…`) |
+| fields named like contact details (`mobileNo`, `phoneNumber`, `contact…`, `…email…`) | always scrubbed, even a number typed into a numeric cell, whatever the name ends with |
+| code fields (…Id, …Code, …Key, …No, …Number, …Ref, ticket) | left alone: they join datasets (unless the value holds an e-mail address) |
 | **dealer and staff names** | **kept**: the dashboards rank and list them. Decide whether that is acceptable for a public page |
 
-The embedded fallback goes through the same sanitizer when it is built. **Note:** the repository's existing root `index.html` (the deployed file) still contains the unsanitized data.
+Other numeric cells are not scanned (an order value is not a phone number). The embedded fallback goes through the same sanitizer when it is built. **Note:** the repository's existing root `index.html` (the deployed file) still contains the unsanitized data.
 
 ## Security model
 
@@ -49,12 +51,12 @@ The embedded fallback goes through the same sanitizer when it is built. **Note:*
 | Session: signed (HMAC-SHA-256, separate `CRM_SESSION_SECRET`), `HttpOnly; SameSite=Strict; Path=/api; Secure` (https), 8 h by default | `server/auth.ts` |
 | Logout revokes the session id in the store, so a copied cookie stops working | `server/handlers/logout.ts` |
 | State-changing calls need the cookie **and** `X-CRM-Admin: 1` **and** a same-origin request (`Origin`, `Sec-Fetch-Site`) | `assertSameOrigin` |
-| Login throttle: 5 failures / 15 min per client address, kept in the store and per instance; plus a short delay on a failure; 300 requests / min per session | `assertLoginAllowed` |
+| Login throttle: each attempt is counted **before** the secret is checked, with a compare-and-swap on a counter in the store, so a parallel burst cannot out-run it; 5 attempts / 15 min per client address; if the counter cannot be stored the sign-in is refused; a short delay on a failure; 300 requests / min per session | `reserveLoginAttempt` |
 | Secrets exist only in server environment variables; the front-end bundle is checked for them in the end-to-end test | `tools/compat/e2e_publish.cjs` |
-| Public endpoints return no store URLs, no credentials, nothing but sanitized datasets of the current version | `server/handlers/snapshot.ts`, `dataset.ts` |
+| Public endpoints return no store URLs, no credentials, nothing but sanitized datasets of the current version; an unauthenticated caller is not told which settings are missing (the names go to the server log) | `server/handlers/snapshot.ts`, `dataset.ts` |
 | CSP, HSTS, frame and referrer headers | `vercel.json` |
 
-**Limits to know.** The login throttle is best effort across serverless instances: add a Vercel Firewall rate-limit rule for `/api/admin/login` (for example 10 per minute per IP) for a hard guarantee. A shared secret has no per-person audit trail: the history records *when* and the note, not *who*. Dataset blobs are never deleted automatically (history and rollback depend on them); remove old ones in the Blob dashboard if storage matters.
+**Limits to know.** Address-based throttling cannot stop a distributed attack: add a Vercel Firewall rate-limit rule for `/api/admin/login` (for example 10 per minute per IP) for a hard guarantee. A shared secret has no per-person audit trail: the history records *when* and the note, not *who*. Dataset blobs are never deleted automatically (history and rollback depend on them); remove old ones in the Blob dashboard if storage matters.
 
 ## Setting it up on Vercel (a separate project, so production is untouched)
 
@@ -79,7 +81,7 @@ Local rehearsal without Vercel: `npm run build:vercel`, then `CRM_STORE_DIR=.loc
 
 | Check | Command |
 |---|---|
-| unit / integration (importer, sanitizer, server, sync): 157 tests | `npm test` |
+| unit / integration (importer, sanitizer, server, sync): 164 tests | `npm test` |
 | server import graph valid for Node ESM (what Vercel runs) | `npm run typecheck:server` |
 | browser end-to-end: wizard, review, publish, viewer refresh, history, rollback, concurrent publishes, fallback, login limits | `npm run build:vercel && node tools/compat/e2e_publish.cjs` |
 | deployed page vs rebuilt page | `tools/compat/README.md` |

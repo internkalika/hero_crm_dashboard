@@ -56,6 +56,34 @@ describe('sanitizer', () => {
     expect(report.scrubbedValues).toBeGreaterThanOrEqual(5);
     expect(report.residual).toEqual([]);
   });
+  it('finds numbers written with separators, glued to words, and in contact-named fields', async () => {
+    const p = payload('ds_complaints', [{
+      key: 'k', datasetId: 'ds_complaints:all', id: 'c1', rawStatus: 'Open',
+      description: 'Ramesh-9876543210 | Mob.9876543210 | 98 7654 3210 | 9876 543 210 | +91 98765-43210 | 098765 43210',
+      mobileNo: '9876543210', phoneNumber: '98765 43210', contactNumber: 9876543210, emailId: 'a.b@hero.com', ref: 'call ops@hero.com',
+    }]);
+    const { payload: out, report } = await sanitizePayload(p, { pepper: PEPPER });
+    const r = out.records[0] as Record<string, unknown>;
+    expect(r.description).toBe('Ramesh-[removed] | Mob.[removed] | [removed] | [removed] | [removed] | [removed]');
+    expect(r).toMatchObject({ mobileNo: '[removed]', phoneNumber: '[removed]', contactNumber: '[removed]', emailId: '[removed]', ref: 'call [removed]' });
+    expect(report.residual).toEqual([]);
+  });
+  it('does not mistake dates, codes, quantities or amounts for phone numbers', async () => {
+    const plain = payload('ds_orders', [{ key: '0030123456', datasetId: 'ds_orders:all', orderNo: '0030123456', dealerName: 'Delhi Cycles [10045]', dealerKey: '9999900004', orderDate: '2026-10-05', note: 'sent 2026-10-05 qty 12 value 1234567890 on invoice INV-2026100512', total: 98765432 }]);
+    const { payload: out, report } = await sanitizePayload(plain, { pepper: PEPPER });
+    expect({ ...out, raw: plain.raw }).toEqual(plain);
+    expect(report.scrubbedValues).toBe(0);
+  });
+  it('anonymises unverified loyalty members however the number was written, and e-mail identities, consistently', async () => {
+    const mk = (id: string) => ({ key: `2026-10-26|unverified:${id}:Shop`, datasetId: 'loyalty_snapshot:2026-10-26', customerId: 'NOT-CAPTURED', firmName: 'Shop', current: 1, entityKey: `unverified:${id}:Shop`, mobileMasked: '91••••••3210' });
+    const p = payload('loyalty_snapshot', ['98765 43210', '98765-43210', '+91 98765-43210', '919876543210', 'Dealer@Mail.com'].map(mk), [], '2026-10-26');
+    const { payload: out, report } = await sanitizePayload(p, { pepper: PEPPER });
+    const keys = (out.records as Array<{ entityKey: string }>).map((r) => r.entityKey);
+    expect(JSON.stringify(out.records)).not.toMatch(/98765|9876543210|Dealer@Mail/i);
+    expect(new Set(keys.slice(0, 4)).size).toBe(1); // the same number written four ways is the same member
+    expect(keys[4]).toMatch(/^unverified:m[0-9a-f]{12}:Shop$/);
+    expect(report.residual).toEqual([]);
+  });
   it('never publishes raw rows', async () => {
     const { payload: out, report } = await sanitizePayload(loyalty, { pepper: PEPPER });
     expect(out.raw).toEqual([]);

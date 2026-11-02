@@ -1,6 +1,6 @@
 // Applying the published version to this browser, and publishing local changes from it.
 import type { DatasetPayload } from '../types';
-import { loadPayload, removeDataset, saveDataset } from '../store/db';
+import { listMeta, loadPayload, removeDataset, saveDataset } from '../store/db';
 import { decodeDataset, encodeDataset, sha256Hex } from '../publish/codec.js';
 import { diffDatasets } from '../publish/diff.js';
 import { sanitizePayload } from '../publish/sanitize.js';
@@ -62,6 +62,12 @@ export function syncPublished(opts: { force?: boolean; status?: SnapshotStatus |
       }
       if (!opts.force && state.shas[d.id] === d.sha256) continue;
       const p = await downloadVerified(d);
+      // the downloads take a while: look again, right before writing, whether an import landed on this dataset meanwhile
+      const here = (await listMeta()).find((m) => m.id === d.id);
+      if (here ? state.sigs[d.id] !== metaSig(here) : state.sigs[d.id] !== undefined) {
+        keptLocal.push(d.id);
+        continue;
+      }
       await saveDataset(p);
       next.shas[d.id] = d.sha256;
       next.sigs[d.id] = metaSig(p.meta);
@@ -163,12 +169,14 @@ export interface PublishProgress {
  */
 export async function publishLocal(opts: { ids: string[]; remove: string[]; baseVersion: string | null; note: string; onProgress?: (p: PublishProgress) => void }): Promise<PublishOutcome> {
   const datasets: Array<{ id: string; upload: string; parts: number; sha256: string }> = [];
+  const sent: DatasetPayload['meta'][] = []; // what was actually uploaded: a re-import during the upload must stay a local change
   const total = opts.ids.length;
   for (const [i, id] of opts.ids.entries()) {
     opts.onProgress?.({ stage: `Preparing ${id}`, done: i, total });
     const p = await loadPayload(id, false);
     if (!p) throw new Error(`${id} is no longer in this browser.`);
     const { bytes, sha256 } = await encodeDataset(p);
+    sent.push(p.meta);
     const upload = crypto.randomUUID();
     const parts = Math.max(1, Math.ceil(bytes.byteLength / PART));
     for (let n = 0; n < parts; n++) {
@@ -186,8 +194,7 @@ export async function publishLocal(opts: { ids: string[]; remove: string[]; base
     const state = await loadSync();
     for (const id of opts.remove) delete state.sigs[id];
     await saveSync(state);
-    const metas = (await Promise.all(opts.ids.map((id) => loadPayload(id, false)))).flatMap((p) => (p ? [p.meta] : []));
-    await markClean(metas);
+    await markClean(sent);
     await syncPublished({ status: st, force: true });
   }
   return out;

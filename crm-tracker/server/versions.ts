@@ -47,17 +47,28 @@ export async function readManifest(ctx: Context, versionId: string): Promise<Ver
   return o ? dec<VersionManifest>(o.bytes) : null;
 }
 
-export async function listVersions(ctx: Context, limit = 100): Promise<VersionSummary[]> {
+/**
+ * The history of the live data: the current version and its ancestors. A manifest that lost a publish race (or whose publish
+ * was interrupted before the pointer moved) is not an ancestor, so it is neither listed nor offered for restore.
+ */
+export async function versionChain(ctx: Context, limit = 100): Promise<VersionManifest[]> {
   const cur = await readCurrent(ctx);
-  const entries = (await ctx.store!.list(paths(ctx.cfg).versionsPrefix)).filter((e) => e.path.endsWith('/manifest.json'));
-  const ids = entries.map((e) => e.path.split('/').slice(-2)[0]).filter((id) => VERSION_RE.test(id)).sort().reverse().slice(0, limit);
-  const out: VersionSummary[] = [];
-  for (const id of ids) {
+  const out: VersionManifest[] = [];
+  const seen = new Set<string>();
+  let id: string | null = cur?.pointer.versionId ?? null;
+  while (id && out.length < limit && !seen.has(id)) {
+    seen.add(id);
     const m = await readManifest(ctx, id);
-    if (!m) continue;
-    out.push({ versionId: m.versionId, createdAt: m.createdAt, action: m.action, parent: m.parent, restoredFrom: m.restoredFrom, note: m.note, datasets: m.datasets.length, records: m.datasets.reduce((n, d) => n + d.records, 0), current: m.versionId === cur?.pointer.versionId });
+    if (!m) break;
+    out.push(m);
+    id = m.parent;
   }
   return out;
+}
+
+export async function listVersions(ctx: Context, limit = 100): Promise<VersionSummary[]> {
+  const chain = await versionChain(ctx, limit);
+  return chain.map((m, i) => ({ versionId: m.versionId, createdAt: m.createdAt, action: m.action, parent: m.parent, restoredFrom: m.restoredFrom, note: m.note, datasets: m.datasets.length, records: m.datasets.reduce((n, d) => n + d.records, 0), current: i === 0 }));
 }
 
 export async function publicStatus(ctx: Context): Promise<SnapshotStatus> {
@@ -69,10 +80,14 @@ export async function publicStatus(ctx: Context): Promise<SnapshotStatus> {
 }
 
 /** Streams a published dataset. Only datasets of the CURRENT version are served: a rolled-back dataset is not retrievable. */
-export async function datasetStream(ctx: Context, sha: string) {
+export async function assertServable(ctx: Context, sha: string) {
   if (!SHA_RE.test(sha)) throw new HttpError(400, 'bad_sha', 'Invalid dataset address.');
   const status = await publicStatus(ctx);
   if (!status.version?.datasets.some((d) => d.sha256 === sha)) throw new HttpError(404, 'not_found', 'No such published dataset.');
+}
+
+export async function datasetStream(ctx: Context, sha: string) {
+  await assertServable(ctx, sha);
   const o = await ctx.store!.getStream(paths(ctx.cfg).dataset(sha));
   if (!o) throw new HttpError(404, 'not_found', 'No such published dataset.');
   return o;
@@ -158,6 +173,8 @@ async function movePointer(ctx: Context, cur: { etag: string } | null, manifest:
   try {
     await ctx.store!.put(p.current, enc(pointer), cur ? { contentType: 'application/json', ifMatch: cur.etag, overwrite: true } : { contentType: 'application/json', ifNotExists: true });
   } catch (e) {
+    // this publish did not become a version: take its manifest away again (the dataset blobs are content-addressed and harmless)
+    await ctx.store!.del([p.manifest(manifest.versionId)]).catch(() => undefined);
     if (e instanceof PreconditionFailed) throw conflict((await readCurrent(ctx))?.pointer.versionId ?? null);
     throw e;
   }
@@ -225,8 +242,10 @@ export async function rollback(ctx: Context, req: { toVersion: string; baseVersi
   const cur = await readCurrent(ctx);
   if (!cur || cur.pointer.versionId !== req.baseVersion) throw conflict(cur?.pointer.versionId ?? null);
   if (req.toVersion === cur.pointer.versionId) throw new HttpError(400, 'same_version', 'That version is already the published one.');
-  const [now, target] = await Promise.all([readManifest(ctx, cur.pointer.versionId), readManifest(ctx, req.toVersion)]);
+  const chain = await versionChain(ctx, 500);
+  const now = chain[0];
   if (!now) throw new HttpError(500, 'broken_store', 'The current version has no manifest.');
+  const target = chain.find((m) => m.versionId === req.toVersion); // only versions that were really live can be restored
   if (!target) throw new HttpError(404, 'not_found', 'No such version.');
   for (const d of target.datasets) if (!(await ctx.store!.head(paths(ctx.cfg).dataset(d.sha256)))) throw new HttpError(410, 'gone', `The data of ${d.id} in that version is no longer stored.`);
   const nowById = new Map(now.datasets.map((d) => [d.id, d]));

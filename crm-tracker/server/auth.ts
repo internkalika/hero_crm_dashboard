@@ -6,6 +6,7 @@
 //   * failed logins are throttled per client address (persisted in the store, plus a per-instance cache)
 import crypto from 'node:crypto';
 import { HttpError, clientIp } from './http.js';
+import { PreconditionFailed } from './store.js';
 import { adminProblems, paths, type Context } from './config.js';
 
 export const COOKIE = 'crm_admin';
@@ -90,7 +91,8 @@ export function assertSameOrigin(request: Request) {
 export function assertAdminConfigured(ctx: Context) {
   const problems = adminProblems(ctx.cfg);
   if (problems.length || !ctx.store) {
-    throw new HttpError(503, 'not_configured', 'Publishing is not set up on this deployment.', { missing: [...problems, ...(ctx.store ? [] : ['BLOB_READ_WRITE_TOKEN (a private Blob store)'])] });
+    console.warn('[crm-api] publishing is not configured; missing:', [...problems, ...(ctx.store ? [] : ['BLOB_READ_WRITE_TOKEN'])].join('; ')); // names only, in the server log
+    throw new HttpError(503, 'not_configured', 'Publishing is not set up on this deployment.');
   }
 }
 
@@ -117,58 +119,61 @@ export async function requireAdmin(ctx: Context, request: Request): Promise<Sess
 
 /* ------------------------------ login throttling ------------------------------ */
 
-export const LOGIN_MAX_FAILURES = 5;
+export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_WINDOW_MS = 15 * 60_000;
 interface RateState {
-  fails: number;
+  count: number;
   firstAt: number;
   lockedUntil: number;
 }
-const rateMemory = new Map<string, RateState>();
 const rateKey = (request: Request) => crypto.createHash('sha256').update(clientIp(request)).digest('hex').slice(0, 32);
+const locked = (s: RateState, now: number) => {
+  const wait = Math.max(1, Math.ceil((s.lockedUntil - now) / 1000));
+  return new HttpError(429, 'locked', 'Too many failed attempts. Try again later.', { retryAfterSeconds: wait }, { 'Retry-After': String(wait) });
+};
+const unavailable = () => new HttpError(503, 'unavailable', 'Sign-in is temporarily unavailable. Try again shortly.');
 
-async function loadRate(ctx: Context, key: string): Promise<RateState> {
-  const mem = rateMemory.get(key);
-  const stored = await ctx.store!.getBytes(paths(ctx.cfg).rate(key)).catch(() => null);
-  let disk: RateState | null = null;
-  if (stored) {
+/**
+ * Counts a sign-in attempt BEFORE the secret is looked at, with a compare-and-swap on the stored counter, so a burst of
+ * parallel guesses is counted one by one and only the first few are ever checked. A successful sign-in resets the count.
+ * If the counter cannot be read or written the attempt is refused (the throttle fails closed).
+ */
+export async function reserveLoginAttempt(ctx: Context, request: Request): Promise<void> {
+  const path = paths(ctx.cfg).rate(rateKey(request));
+  for (let i = 0; i < 8; i++) {
+    let cur: Awaited<ReturnType<NonNullable<Context['store']>['getBytes']>>;
     try {
-      disk = JSON.parse(new TextDecoder().decode(stored.bytes)) as RateState;
+      cur = await ctx.store!.getBytes(path);
     } catch {
-      disk = null;
+      throw unavailable();
     }
+    const now = ctx.now();
+    let s: RateState = { count: 0, firstAt: 0, lockedUntil: 0 };
+    if (cur) {
+      try {
+        s = JSON.parse(new TextDecoder().decode(cur.bytes)) as RateState;
+      } catch {
+        s = { count: 0, firstAt: 0, lockedUntil: 0 };
+      }
+    }
+    if (s.lockedUntil > now) throw locked(s, now);
+    if (now - s.firstAt > LOGIN_WINDOW_MS) s = { count: 0, firstAt: now, lockedUntil: 0 };
+    s.count += 1;
+    if (s.count > LOGIN_MAX_ATTEMPTS) s.lockedUntil = now + LOGIN_WINDOW_MS;
+    try {
+      await ctx.store!.put(path, new TextEncoder().encode(JSON.stringify(s)), cur ? { contentType: 'application/json', ifMatch: cur.etag } : { contentType: 'application/json', ifNotExists: true });
+    } catch (e) {
+      if (e instanceof PreconditionFailed) continue; // another attempt was counted at the same moment: count again on top of it
+      throw unavailable();
+    }
+    if (s.lockedUntil > now) throw locked(s, now);
+    return;
   }
-  // the stricter of the two views (another instance may have recorded failures this one has not seen)
-  const best = [mem, disk].filter(Boolean).sort((a, b) => b!.fails - a!.fails)[0];
-  return best ?? { fails: 0, firstAt: 0, lockedUntil: 0 };
-}
-
-async function saveRate(ctx: Context, key: string, s: RateState) {
-  rateMemory.set(key, s);
-  await ctx.store!.put(paths(ctx.cfg).rate(key), new TextEncoder().encode(JSON.stringify(s)), { contentType: 'application/json', overwrite: true }).catch(() => undefined);
-}
-
-export async function assertLoginAllowed(ctx: Context, request: Request) {
-  const s = await loadRate(ctx, rateKey(request));
-  const now = ctx.now();
-  if (s.lockedUntil > now) {
-    const wait = Math.ceil((s.lockedUntil - now) / 1000);
-    throw new HttpError(429, 'locked', 'Too many failed attempts. Try again later.', { retryAfterSeconds: wait }, { 'Retry-After': String(wait) });
-  }
-}
-
-export async function recordLoginFailure(ctx: Context, request: Request) {
-  const key = rateKey(request);
-  const s = await loadRate(ctx, key);
-  const now = ctx.now();
-  const fresh = now - s.firstAt > LOGIN_WINDOW_MS;
-  const next: RateState = fresh ? { fails: 1, firstAt: now, lockedUntil: 0 } : { ...s, fails: s.fails + 1 };
-  if (next.fails >= LOGIN_MAX_FAILURES) next.lockedUntil = now + LOGIN_WINDOW_MS;
-  await saveRate(ctx, key, next);
+  throw new HttpError(429, 'busy', 'Too many attempts at once. Try again shortly.', {}, { 'Retry-After': '5' });
 }
 
 export async function recordLoginSuccess(ctx: Context, request: Request) {
-  await saveRate(ctx, rateKey(request), { fails: 0, firstAt: 0, lockedUntil: 0 });
+  await ctx.store!.put(paths(ctx.cfg).rate(rateKey(request)), new TextEncoder().encode(JSON.stringify({ count: 0, firstAt: 0, lockedUntil: 0 })), { contentType: 'application/json', overwrite: true }).catch(() => undefined);
 }
 
 export async function revokeSession(ctx: Context, session: SessionPayload) {
@@ -178,5 +183,4 @@ export async function revokeSession(ctx: Context, session: SessionPayload) {
 /** tests */
 export function resetAuthMemory() {
   throttleMemory.clear();
-  rateMemory.clear();
 }

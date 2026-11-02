@@ -204,6 +204,30 @@ describe('a viewer', () => {
   });
 });
 
+describe('a local import that lands while a sync is downloading', () => {
+  it('is kept, not overwritten', async () => {
+    await adminLogin(ADMIN_SECRET);
+    await saveDataset(usage([['a', 'Open']]));
+    const v1 = await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: null, note: 'one' });
+    await saveDataset(usage([['a', 'Open'], ['b', 'Open']], '2026-11-02T00:00:00.000Z', 'merge'));
+    await publishLocal({ ids: ['ds_usage:all'], remove: [], baseVersion: v1.versionId, note: 'two' });
+    // a viewer-turned-administrator at v1, clean
+    await freshBrowser();
+    await saveDataset(usage([['a', 'Open']]));
+    await markClean([usage([['a', 'Open']]).meta]);
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const res = await real(input, init);
+      if (String(input).includes('/api/dataset')) await saveDataset(usage([['a', 'Open'], ['mine', 'Open']], '2026-11-05T00:00:00.000Z', 'merge')); // an import finishes during the download
+      return res;
+    }) as typeof fetch;
+    const r = await syncPublished();
+    globalThis.fetch = real;
+    expect(r.keptLocal).toEqual(['ds_usage:all']);
+    expect((await loadPayload('ds_usage:all'))!.records.map((x) => (x as { key: string }).key)).toEqual(['a', 'mine']);
+  });
+});
+
 describe('hosts without a backend', () => {
   it('asks a static host once, then stops asking', async () => {
     let calls = 0;

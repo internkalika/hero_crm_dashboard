@@ -1,4 +1,4 @@
-import { assertAdminConfigured, assertLoginAllowed, assertSameOrigin, createSessionToken, recordLoginFailure, recordLoginSuccess, safeEqual, sessionCookie } from '../auth.js';
+import { assertAdminConfigured, assertSameOrigin, createSessionToken, recordLoginSuccess, reserveLoginAttempt, safeEqual, sessionCookie } from '../auth.js';
 import { getContext } from '../config.js';
 import { HttpError, guard, json, methodNotAllowed, readJson } from '../http.js';
 
@@ -6,13 +6,12 @@ export const POST = guard(async (request) => {
   const ctx = getContext();
   assertAdminConfigured(ctx);
   assertSameOrigin(request);
-  await assertLoginAllowed(ctx, request);
+  await reserveLoginAttempt(ctx, request); // counted first, then checked: a parallel burst cannot out-run the limit
   const body = await readJson<{ secret?: unknown }>(request, 4096).catch((e) => {
     throw e instanceof HttpError ? e : new HttpError(400, 'bad_request', 'Bad request.');
   });
   const given = typeof body.secret === 'string' ? body.secret : '';
   if (!given || given.length > 512 || !safeEqual(given, ctx.cfg.adminSecret!)) {
-    await recordLoginFailure(ctx, request);
     await new Promise((r) => setTimeout(r, 400)); // slows guessing down a little more
     throw new HttpError(401, 'invalid_credentials', 'That secret is not correct.');
   }

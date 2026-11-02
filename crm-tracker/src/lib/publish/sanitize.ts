@@ -7,12 +7,16 @@
 //   * every other text: mobile numbers (10 digits, optional +91 / 0 / a 5-5 split) and e-mail addresses are removed
 //   * fields that hold codes (…Id, …Code, …Key, …No, …Number, …Ref, ticket) are left alone: they join datasets
 // Names of dealers and staff are NOT removed: the dashboards rank and list them.
+// Numeric cells are not scanned, except in fields named like contact details (mobile, phone, contact, e-mail …).
 import type { DatasetPayload } from '../types.js';
 
-export const MOBILE_RE = /(?<![\d.\-])(?:\+?91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}(?!\d)/g;
+/** An Indian mobile number as people write it: optional +91 / 91 / 0, ten digits starting 6-9, spaces, dots or hyphens between any digits. */
+export const MOBILE_RE = /(?<!\d)(?:\+?91[\s.-]?|0)?[6-9](?:[\s.-]?\d){9}(?!\d)/g;
 export const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const LONG_DIGITS_RE = /\d{10,}/g;
 const ID_FIELD_RE = /(?:^|[a-z])(?:id|code|key|no|number|ref|ticket)$/i;
+/** fields that hold contact details whatever their name ends with (mobileNo, phoneNumber, emailId …): never treated as codes */
+const CONTACT_FIELD_RE = /(mobile|phone|contact|e-?mail|cell|whatsapp)/i;
 export const REMOVED = '[removed]';
 
 export interface SanitizeReport {
@@ -24,7 +28,7 @@ export interface SanitizeReport {
   residual: Array<{ path: string; kind: 'mobile' | 'email' }>;
 }
 
-const isIdField = (name: string) => ID_FIELD_RE.test(name);
+const isIdField = (name: string) => ID_FIELD_RE.test(name) && !CONTACT_FIELD_RE.test(name);
 
 /** The display field is already masked ("91••••••2764"); if a full number ever shows up there, mask it the same way. */
 function maskIfUnmasked(v: string): string {
@@ -39,19 +43,24 @@ async function hmacHex(secret: string, message: string): Promise<string> {
   return [...sig].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Digit runs of the loyalty keys that identify a phone number, tokenised once each. */
+/** What identifies a person inside a loyalty key: a phone-like number (any separators, or a long digit run) or an e-mail address. */
+const KEY_PII_RE = new RegExp(`${EMAIL_RE.source}|${MOBILE_RE.source}|${LONG_DIGITS_RE.source}`, 'g');
+/** the same number written two ways ("98765 43210", "9876543210") must give the same token */
+const normalisePii = (s: string) => (s.includes('@') ? s.toLowerCase() : s.replace(/\D/g, '').slice(-10));
+
+/** Tokens for everything in the loyalty keys that identifies a person, computed once each. */
 async function tokenTable(payload: DatasetPayload, pepper: string): Promise<Map<string, string>> {
-  const runs = new Set<string>();
+  const found = new Set<string>();
   const scan = (s: unknown) => {
     if (typeof s !== 'string') return;
-    for (const m of s.matchAll(LONG_DIGITS_RE)) runs.add(m[0]);
+    for (const m of s.matchAll(KEY_PII_RE)) found.add(normalisePii(m[0]));
   };
   for (const r of payload.records as Array<Record<string, unknown>>) {
     scan(r.key);
     scan(r.entityKey);
   }
   const table = new Map<string, string>();
-  for (const run of runs) table.set(run, `m${(await hmacHex(pepper, run)).slice(0, 12)}`);
+  for (const v of found) table.set(v, `m${(await hmacHex(pepper, v)).slice(0, 12)}`);
   return table;
 }
 
@@ -68,17 +77,22 @@ export async function sanitizePayload(input: DatasetPayload, opts: { pepper: str
     return out;
   };
   const tokenise = (s: string): string => {
-    if (!s.match(LONG_DIGITS_RE)) return s;
-    report.tokenisedKeys++;
-    return s.replace(LONG_DIGITS_RE, (run) => tokens.get(run) ?? REMOVED);
+    let hit = false;
+    const out = s.replace(KEY_PII_RE, (m) => ((hit = true), tokens.get(normalisePii(m)) ?? REMOVED));
+    if (hit) report.tokenisedKeys++;
+    return out;
   };
 
   const walk = (v: unknown, field: string): unknown => {
     if (typeof v === 'string') {
       if (loyalty && (field === 'key' || field === 'entityKey')) return tokenise(v);
-      if (isIdField(field)) return v;
+      if (isIdField(field)) return v.includes('@') ? scrubText(v) : v; // codes join datasets, but an e-mail address is never a code
       if (loyalty && field === 'mobileMasked') return maskIfUnmasked(v);
       return scrubText(v);
+    }
+    if (typeof v === 'number' && CONTACT_FIELD_RE.test(field)) {
+      report.scrubbedValues++;
+      return REMOVED; // a phone number typed into a numeric cell
     }
     if (Array.isArray(v)) return v.map((x) => walk(x, field));
     if (v && typeof v === 'object') {
@@ -106,7 +120,7 @@ export function findResidual(payload: DatasetPayload, loyalty = payload.meta.sou
   const visit = (v: unknown, field: string, path: string) => {
     if (out.length >= cap) return;
     if (typeof v === 'string') {
-      if (isIdField(field) || (loyalty && (field === 'key' || field === 'entityKey'))) return;
+      if (isIdField(field) && !v.includes('@')) return;
       if (/[•*xX]{4,}/.test(v) && !/\d{7,}/.test(v)) return;
       MOBILE_RE.lastIndex = 0;
       EMAIL_RE.lastIndex = 0;

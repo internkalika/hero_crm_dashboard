@@ -93,13 +93,13 @@ const publish = async (cookie: string, body: unknown) => publishH.POST(req('POST
 const status = async () => (await (await snapshotH.GET(req('GET', '/api/snapshot'))).json()) as SnapshotStatus;
 
 describe('not configured', () => {
-  it('reports the missing settings by name only, and the public API stays harmless', async () => {
+  it('says only that publishing is not set up, and the public API stays harmless', async () => {
     setContext(ctxWith(null, { CRM_ADMIN_SECRET: 'short' }));
     const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: 'short' } }));
     expect(res.status).toBe(503);
     const b = await res.json();
-    expect(JSON.stringify(b)).toMatch(/CRM_ADMIN_SECRET.*CRM_SESSION_SECRET.*CRM_PUBLISH_PEPPER.*BLOB_READ_WRITE_TOKEN/);
-    expect(JSON.stringify(b)).not.toContain('short"');
+    expect(b).toMatchObject({ error: 'not_configured' });
+    expect(JSON.stringify(b)).not.toMatch(/CRM_|BLOB_|short"/); // an unauthenticated caller learns nothing about the settings
     expect(await (await snapshotH.GET(req('GET', '/api/snapshot'))).json()).toMatchObject({ configured: false, version: null });
     expect(await (await session.GET(req('GET', '/api/admin/session'))).json()).toMatchObject({ configured: false, admin: false });
   });
@@ -165,6 +165,24 @@ describe('administrator sign-in', () => {
     resetAuthMemory();
     expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip: '198.51.100.9' }))).status).toBe(200);
   }, 20000);
+  it('counts a burst of parallel guesses one by one: only the first few are ever checked', async () => {
+    const ip = '198.51.100.77';
+    const burst = await Promise.all(Array.from({ length: 25 }, (_, i) => login.POST(req('POST', '/api/admin/login', { body: { secret: `guess-${i}` }, ip }))));
+    const checked = burst.filter((r) => r.status === 401).length;
+    expect(checked).toBeLessThanOrEqual(5);
+    expect(burst.every((r) => r.status === 401 || r.status === 429)).toBe(true);
+    expect((await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET }, ip }))).status).toBe(429); // locked, even for the right secret
+  }, 30000);
+  it('refuses sign-in (fails closed) when the attempt counter cannot be stored', async () => {
+    class Broken extends FileStore {
+      put(p: string, b: Uint8Array, o: PutOptions) {
+        return p.includes('/security/ratelimit/') ? Promise.reject(new Error('store down')) : super.put(p, b, o);
+      }
+    }
+    setContext(ctxWith(new Broken(dir)));
+    const res = await login.POST(req('POST', '/api/admin/login', { body: { secret: ENV.CRM_ADMIN_SECRET } }));
+    expect(res.status).toBe(503);
+  });
   it('keeps the admin endpoints closed without a session', async () => {
     const calls: Array<[() => Promise<Response>]> = [
       [() => stage.POST(req('POST', '/api/admin/stage?upload=x&part=0', { raw: new Uint8Array(4) }))],
@@ -196,7 +214,9 @@ describe('publishing', () => {
     const sha = st.version!.datasets[0].sha256;
     const ds = await datasetH.GET(req('GET', `/api/dataset?sha=${sha}`));
     expect(ds.status).toBe(200);
-    expect(ds.headers.get('cache-control')).toMatch(/immutable/);
+    expect(ds.headers.get('cache-control')).toBe('no-cache'); // rolled-back data must stop being served at once: never cached for long
+    expect(ds.headers.get('etag')).toBe(`"${st.version!.datasets[0].sha256}"`);
+    expect((await datasetH.GET(req('GET', `/api/dataset?sha=${st.version!.datasets[0].sha256}`, { headers: { 'if-none-match': ds.headers.get('etag')! } }))).status).toBe(304);
     const payload = await decodeDataset(new Uint8Array(await ds.arrayBuffer()));
     expect(JSON.stringify(payload)).not.toContain('917002533087'); // the server sanitized it, whatever the client sent
     expect((payload.records[0] as { entityKey: string }).entityKey).toMatch(/^unverified:m[0-9a-f]{12}:Cycle house$/);
@@ -282,6 +302,23 @@ describe('publishing', () => {
   });
 });
 
+describe('versions that were never live', () => {
+  it('are neither listed nor restorable', async () => {
+    const c = await signIn();
+    const v1 = await (await publish(c, { baseVersion: null, note: 'live', datasets: [await upload(c, usage([['a', 'Open']]))] })).json();
+    const v2 = await (await publish(c, { baseVersion: v1.versionId, note: 'live too', datasets: [await upload(c, usage([['a', 'Open'], ['b', 'Open']]))] })).json();
+    // an orphan manifest, as an interrupted publish could leave: a copy of v2 under another id that no pointer ever named
+    const real = await store.getBytes(`crm-tracker/versions/${v2.versionId}/manifest.json`);
+    const orphan = 'v20261102T235959Z-abcdef';
+    await store.put(`crm-tracker/versions/${orphan}/manifest.json`, new TextEncoder().encode(JSON.stringify({ ...JSON.parse(new TextDecoder().decode(real!.bytes)), versionId: orphan, note: 'phantom' })), { contentType: 'application/json', ifNotExists: true });
+    const hist = (await (await versionsH.GET(req('GET', '/api/admin/versions', { cookie: c }))).json()) as { versions: VersionSummary[] };
+    expect(hist.versions.map((v) => v.note)).toEqual(['live too', 'live']);
+    const rb = await rollbackH.POST(req('POST', '/api/admin/rollback', { cookie: c, body: { toVersion: orphan, baseVersion: v2.versionId } }));
+    expect(rb.status).toBe(404);
+    expect((await status()).version!.versionId).toBe(v2.versionId);
+  });
+});
+
 describe('concurrency and failure', () => {
   it('lets exactly one of two simultaneous publishes win; the loser gets 409 and the data stays valid', async () => {
     const c = await signIn();
@@ -293,6 +330,7 @@ describe('concurrency and failure', () => {
     const loser = results.find((r) => r.status === 409)!;
     expect(await loser.json()).toMatchObject({ error: 'conflict' });
     const st = await status();
+    expect((await store.list('crm-tracker/versions/')).length).toBe(2); // the loser left no manifest behind: no phantom version
     const winnerNote = (await results.find((r) => r.status === 200)!.json()).versionId;
     expect(st.version!.versionId).toBe(winnerNote);
     const payload = await decodeDataset(new Uint8Array(await (await datasetH.GET(req('GET', `/api/dataset?sha=${st.version!.datasets[0].sha256}`))).arrayBuffer()));
@@ -328,6 +366,7 @@ describe('concurrency and failure', () => {
     expect(res.status).toBe(500);
     expect(JSON.stringify(await res.json())).not.toMatch(/network lost/); // internals are not echoed
     setContext(ctxWith(store));
+    expect((await store.list('crm-tracker/versions/')).length).toBe(1); // the interrupted publish did not leave a manifest
     const st = await status();
     expect(st.version).toMatchObject({ versionId: v1.versionId, note: 'stable' }); // still the complete earlier version
     const payload = await decodeDataset(new Uint8Array(await (await datasetH.GET(req('GET', `/api/dataset?sha=${st.version!.datasets[0].sha256}`))).arrayBuffer()));
