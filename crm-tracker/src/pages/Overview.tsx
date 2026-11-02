@@ -288,7 +288,7 @@ export default function Overview() {
     ];
     const notes = describeFilters(cf, { dealer: 'Dealer' }, [
       `Figures by system: ${basis}`,
-      brief ? `Management signals, risks and actions: ${brief.period} (the periods of the Dealer App vs DataSense SFA page; open it to change them)` : 'No management brief: no dated orders were imported',
+      brief ? `Management signals, risks and actions: ${brief.period} ` : 'No management brief: no dated orders were imported',
       dealerKeys.length ? 'Bizom usage and the Issue Tracker are not recorded per dealer and are left out while a dealer is selected.' : 'All dealers.',
       'Order value is sales value, never profit: the imported files contain no cost data.',
     ]);
@@ -306,11 +306,7 @@ export default function Overview() {
       {brief && signals.length > 0 && (
         <section aria-label="Signals">
           <SectionTitle
-            right={
-              <button type="button" onClick={go('/')} className="text-xs font-semibold text-hero-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
-                {brief.period} · change periods
-              </button>
-            }
+            right={<span className="text-xs font-semibold text-ink-2">{brief.period}</span>}
           >
             Signals
           </SectionTitle>

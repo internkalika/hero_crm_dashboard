@@ -1,5 +1,5 @@
 /* Landing page + Usage Report styles (appended to the app stylesheet). Hero Cycles white / red / charcoal. */
-.lp{--red:rgb(var(--hero-600));--lp-ink:rgb(var(--lp-ink));--lp-ink2:rgb(var(--ink-2));--lp-ink3:rgb(var(--ink-3));--line:rgb(var(--slate-200));--blue:#2a78d6;--good:#1b8a63;--warn:#b7791f;--bad:rgb(var(--hero-600));color:var(--lp-ink)}
+.lp{--red:rgb(var(--hero-600));--lp-ink:rgb(var(--ink));--lp-ink2:rgb(var(--ink-2));--lp-ink3:rgb(var(--ink-3));--line:rgb(var(--slate-200));--blue:#2a78d6;--good:#1b8a63;--warn:#b7791f;--bad:rgb(var(--hero-600));color:var(--lp-ink)}
 .lp *{box-sizing:border-box}
 .lp .mut{color:var(--lp-ink3)}
 .lp-scope{display:flex;flex-wrap:wrap;gap:.4rem;margin:-.25rem 0 .75rem}
@@ -8,7 +8,7 @@
 .lp-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem 1rem;background:rgb(var(--surface));border:1px solid var(--line);border-radius:.5rem;padding:.6rem .8rem;margin-bottom:.6rem}
 .lp-pick{display:flex;flex-direction:column;gap:.2rem;position:relative}
 .lp-lab{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--lp-ink3)}
-.lp-btn{border:1px solid rgb(var(--slate-300));background:rgb(var(--surface));border-radius:.375rem;padding:.3rem .6rem;font-size:12.5px;min-width:9rem;text-align:left;color:var(--ink)}
+.lp-btn{border:1px solid rgb(var(--slate-300));background:rgb(var(--surface));border-radius:.375rem;padding:.3rem .6rem;font-size:12.5px;min-width:9rem;text-align:left;color:var(--lp-ink)}
 .lp-btn.on{border-color:var(--red);background:rgb(var(--hero-50));color:rgb(var(--hero-700))}
 .lp-pop{position:absolute;z-index:40;top:100%;left:0;margin-top:.2rem;width:19rem;max-height:18rem;overflow:auto;background:rgb(var(--surface));border:1px solid var(--line);border-radius:.5rem;box-shadow:0 8px 24px rgba(41,41,41,.16);padding:.35rem}
 .lp-opt{display:flex;gap:.5rem;align-items:center;padding:.3rem .4rem;font-size:12.5px;border-radius:.25rem;cursor:pointer}
@@ -23,7 +23,7 @@
 .lp-nav button:hover{border-color:var(--red);color:var(--red)}
 .lp-sec{margin-top:1.6rem;scroll-margin-top:4.5rem}
 .lp-sec-h{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:.6rem;border-left:4px solid var(--red);padding-left:.65rem}
-.lp-sec-h h2{font-size:1.05rem;font-weight:700;color:var(--ink)}
+.lp-sec-h h2{font-size:1.05rem;font-weight:700;color:var(--lp-ink)}
 .lp-sec-h p{font-size:12.5px;color:var(--lp-ink3);margin-top:.1rem}
 .lp-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:start}
 .lp-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
@@ -42,7 +42,7 @@
 .lp-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
 .lp-tile{background:rgb(var(--slate-50));border-radius:.5rem;padding:.55rem .7rem}
 .lp-tile .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--lp-ink3)}
-.lp-tile .v{font-size:1.3rem;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums;color:var(--ink)}
+.lp-tile .v{font-size:1.3rem;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums;color:var(--lp-ink)}
 .lp-tile .v.t-bad{color:var(--bad)}
 .lp-tile .s{font-size:11px;color:var(--lp-ink3);margin-top:.1rem}
 .lp-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;margin-top:.7rem}
@@ -59,7 +59,7 @@
 .lp-pair{background:rgb(var(--surface));border:1px solid var(--line);border-radius:.55rem;padding:.65rem .75rem;display:flex;flex-direction:column;gap:.4rem;min-width:0}
 .lp-pair.wide{grid-column:span 2}
 @media(max-width:760px){.lp-pair.wide{grid-column:auto}}
-.lp-pair-h{display:flex;justify-content:space-between;align-items:center;gap:.4rem;font-size:12.5px;font-weight:600;color:var(--ink)}
+.lp-pair-h{display:flex;justify-content:space-between;align-items:center;gap:.4rem;font-size:12.5px;font-weight:600;color:var(--lp-ink)}
 .lp-pair-v{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
 .lp-pair-v div{border-left:3px solid var(--c);padding-left:.5rem;min-width:0}
 .lp-pair-v div.off{opacity:.35}
@@ -87,7 +87,7 @@
 .lp-chips button.good:not(.on){border-color:rgb(var(--good-text) / .35)}.lp-chips button.bad:not(.on){border-color:rgb(var(--bad-text) / .35)}.lp-chips button.warn:not(.on){border-color:rgb(var(--warn-text) / .35)}
 .lp-chips button:disabled{opacity:.4;cursor:default}
 .lp-dl{text-align:left;display:flex;flex-direction:column;line-height:1.2}
-.lp-dl span{font-weight:600;color:var(--ink)}.lp-dl small{font-size:11px;color:var(--lp-ink3)}
+.lp-dl span{font-weight:600;color:var(--lp-ink)}.lp-dl small{font-size:11px;color:var(--lp-ink3)}
 .lp-dl:hover span{color:var(--red);text-decoration:underline}
 .lp-foot{font-size:11px;color:var(--lp-ink3);margin-top:.5rem}
 .lp-cap{font-size:11.5px;margin-top:.3rem;text-align:center}
@@ -101,7 +101,7 @@
 .lp-def summary{cursor:pointer;padding:.65rem .9rem;font-weight:600;font-size:13px}
 .lp-def-b{padding:0 .9rem .8rem}
 .lp-def ul{margin:0;padding-left:1.05rem;list-style:disc;font-size:12.5px;color:var(--lp-ink2)}
-.lp-def li{margin-top:.35rem;line-height:1.5}.lp-def li b{color:var(--ink)}
+.lp-def li{margin-top:.35rem;line-height:1.5}.lp-def li b{color:var(--lp-ink)}
 .lp .lp-tblgap{margin-top:1rem}
 .lp-sec .card+.card,.lp-sec .lp-tiles3+.card{margin-top:1rem}
 .lp-pbars{display:flex;gap:3px;height:6px;align-items:center}.lp-pbars i{display:block;height:6px;border-radius:3px}
@@ -122,7 +122,7 @@
 .lp-modal{position:fixed;inset:0;z-index:40;background:rgba(41,41,41,.5);display:flex;align-items:center;justify-content:center;padding:1.2rem}
 .lp-dialog{background:rgb(var(--surface-2));border-radius:.75rem;width:min(1280px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .lp-dialog header{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.1rem;border-bottom:1px solid var(--line);background:rgb(var(--surface));border-radius:.75rem .75rem 0 0}
-.lp-dialog header h3{font-size:1rem;font-weight:700;color:var(--ink)}
+.lp-dialog header h3{font-size:1rem;font-weight:700;color:var(--lp-ink)}
 .lp-dialog header button{font-size:16px;padding:.2rem .55rem;border-radius:.375rem;color:var(--lp-ink2)}.lp-dialog header button:hover{background:rgb(var(--slate-100))}
 .lp-dialog-b{padding:1rem 1.1rem 1.2rem;overflow:auto}
 .lp-dbtns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}
@@ -149,3 +149,7 @@
 @media(max-width:760px){.lp-pair.wide3{grid-column:auto}}
 .lp-stack{display:grid;gap:1rem}
 .lp-click>.card{margin:0}
+
+/* selected pills: dark chip on light, light chip on dark */
+html.dark .lp-seg button.on, html.dark .lp-chips button.on { background: rgb(var(--slate-200)); border-color: rgb(var(--slate-300)); color: rgb(var(--ink)); }
+html.dark .lp-chip.red { color: #fff; }

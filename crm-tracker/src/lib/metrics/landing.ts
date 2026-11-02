@@ -70,6 +70,11 @@ export const monthName = (m: string) => MON[+m.slice(5, 7) - 1] ?? m;
 let spansYears = false;
 export const monthShort = (m: string) => monthName(m).slice(0, 3) + (spansYears ? ` ${m.slice(2, 4)}` : '');
 const dayNum = (d: string) => +d.slice(8, 10);
+const addDaysIso = (iso: string, n: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 const daysBetween = (a: string, b: string) => Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5) + 1;
 const monthEnd = (m: string) => `${m}-${String(new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate()).padStart(2, '0')}`;
 
@@ -90,9 +95,19 @@ export function buildCtx(data: any): Ctx | null {
   const months = [...new Set<string>(appLines.map((l) => l.month as string).filter(Boolean))].sort();
   spansYears = new Set(months.map((m) => m.slice(0, 4))).size > 1;
   const wins: Record<string, Win> = {};
+  // A month's window ends where the Dealer App export for that month ends (the same dates for both channels). An export that reaches
+  // within two days of the month end counts as the whole month (the rule the rest of the dashboard uses for "complete"). So a month's
+  // figures do not change when a later month is added: October keeps its 1-21 Oct window once November arrives.
+  const lastIn = new Map<string, string>();
+  for (const d of dates) lastIn.set(d.slice(0, 7), d);
+  const reach = (m: string) => {
+    const last = lastIn.get(m) ?? monthEnd(m);
+    const end = monthEnd(m);
+    return last >= addDaysIso(end, -2) ? end : last;
+  };
   months.forEach((m, i) => {
     const from = i === 0 ? launch : `${m}-01`;
-    const to = i === months.length - 1 ? (cutoff < monthEnd(m) ? cutoff : monthEnd(m)) : monthEnd(m);
+    const to = reach(m);
     wins[m] = { month: m, from, to, days: daysBetween(from, to), label: `${monthShort(m)} ${dayNum(from)}–${dayNum(to)}`, mlabel: monthName(m) };
   });
   const keys = new Set(dealers.map((d) => d.key));

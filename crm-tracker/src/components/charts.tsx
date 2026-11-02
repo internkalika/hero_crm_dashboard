@@ -113,10 +113,10 @@ export function ChartCard({ title, subtitle, info, children, table, className, n
         </h3>
         {table && (
           <div className="inline-flex shrink-0 rounded-md border border-slate-300 bg-surface p-0.5" role="group" aria-label="View as chart or table">
-            <button aria-pressed={view === 'chart'} aria-label="Chart view" onClick={() => setView('chart')} className={clsx('rounded p-1', view === 'chart' ? 'bg-ink text-white' : 'text-ink-2 hover:bg-slate-100')}>
+            <button aria-pressed={view === 'chart'} aria-label="Chart view" onClick={() => setView('chart')} className={clsx('rounded p-1', view === 'chart' ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-slate-100')}>
               <BarChart3 size={14} />
             </button>
-            <button aria-pressed={view === 'table'} aria-label="Table view" onClick={() => setView('table')} className={clsx('rounded p-1', view === 'table' ? 'bg-ink text-white' : 'text-ink-2 hover:bg-slate-100')}>
+            <button aria-pressed={view === 'table'} aria-label="Table view" onClick={() => setView('table')} className={clsx('rounded p-1', view === 'table' ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-slate-100')}>
               <Table2 size={14} />
             </button>
           </div>

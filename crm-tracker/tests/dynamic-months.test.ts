@@ -93,6 +93,19 @@ describe('Dealer App vs DataSense SFA with any number of months', () => {
     expect(a.app.valid).toBe(6);
     expect(a.months).toEqual(['2026-10']);
   });
+  it('October keeps its own window when November arrives: DataSense orders after the Dealer App export ended are not pulled in', () => {
+    const mk = (months: string[]) => {
+      const d = build(months, ['03', '15']);
+      d.dsOrders.push(dsOrder('D001', '2026-10-28', 'LATE-OCT')); // DataSense order after the Dealer App export of October (15 Oct) ended
+      return d;
+    };
+    const range = { from: '2026-10-01', to: '2026-10-31' };
+    const before = buildView(buildCtx(mk(['2026-09', '2026-10']))!, { range, dealers: [], channel: 'both', models: [] });
+    const after = buildView(buildCtx(mk(['2026-09', '2026-10', '2026-11']))!, { range, dealers: [], channel: 'both', models: [] });
+    expect(after.ds).toEqual(before.ds);
+    expect(after.app).toEqual(before.app);
+    expect(after.ctx.wins['2026-10'].to).toBe('2026-10-15');
+  });
   it('October + November together are the sum of the two months, and a movement compares them', () => {
     const ctx = buildCtx(build(['2026-09', '2026-10', '2026-11']))!;
     const both = buildView(ctx, { range: { from: '2026-10-01', to: '2026-11-30' }, dealers: [], channel: 'both', models: [] });
