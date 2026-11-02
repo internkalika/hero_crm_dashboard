@@ -10,5 +10,5 @@
     "baseUrl": null,
     "paths": {}
   },
-  "include": ["server", "api", "src/lib/publish", "src/lib/types.ts", "src/lib/ingest/sources.ts", "src/lib/util/parse.ts"]
+  "include": ["server", "api", "../api", "src/lib/publish", "src/lib/types.ts", "src/lib/ingest/sources.ts", "src/lib/util/parse.ts"]
 }

@@ -1,0 +1,7 @@
+{
+  "name": "hero-crm-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Repository root. The application lives in crm-tracker/; this file only tells Vercel to treat the API shims in api/ as ES modules on Node 22.",
+  "engines": { "node": "22.x" }
+}
