@@ -7,6 +7,7 @@ import type { NormalizeCtx } from './common';
 import { normalizeDealerOrders, normalizeDsOrders } from './orders';
 import { normalizeDealerComplaints, normalizeDsComplaints } from './complaints';
 import { normalizeBizomUsage, normalizeEmployeeActivity } from './usage';
+import { normalizeDsUsage } from './dsusage';
 import { normalizeFocus, normalizeIssueTracker, normalizeLoyalty } from './other';
 import { hashString } from '../util/parse';
 
@@ -106,6 +107,9 @@ export function normalizeFile(read: ReadFile, source: SourceType, ctx: Normalize
       break;
     case 'ds_employee_activity':
       payload = normalizeEmployeeActivity(read, ctx, 'ds_employee_activity');
+      break;
+    case 'ds_usage':
+      payload = normalizeDsUsage(read, ctx);
       break;
     case 'dealer_sfa_activity':
       payload = normalizeEmployeeActivity(read, ctx, 'dealer_sfa_activity');
@@ -252,5 +256,10 @@ export function applyImport(
     issues: [...previous.issues, ...incoming.issues],
   };
   merged.meta.period = merged.meta.periodStart && merged.meta.periodEnd ? `${merged.meta.periodStart} to ${merged.meta.periodEnd}` : m.period;
+  if (m.source === 'ds_usage') {
+    // the Summary and ASM-Employee-wise sheets describe one file; after a merge they would no longer match the orders
+    merged.meta.extra = { ...(m.extra ?? {}), reconciliation: [], usageReport: { reported: null, summary: null, employees: null, notes: [] } };
+    merged.meta.inference.push('The report\'s own Summary and ASM-Employee-wise sheets describe a single file and are not kept after a merge.');
+  }
   return { payload: merged, summary: { ...base, mode: 'merge', added, updated, unchanged } };
 }

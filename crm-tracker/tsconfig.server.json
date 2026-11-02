@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": false,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "baseUrl": null,
+    "paths": {}
+  },
+  "include": ["server", "api", "src/lib/publish", "src/lib/types.ts", "src/lib/ingest/sources.ts", "src/lib/util/parse.ts"]
+}

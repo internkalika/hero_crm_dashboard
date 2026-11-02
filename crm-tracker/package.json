@@ -14,10 +14,14 @@
     "snapshot": "vite-node scripts/make-snapshot.ts",
     "build:single": "tsc --noEmit && vite build --mode single",
     "build:html": "npm run snapshot && npm run build:single && node scripts/finish-html.mjs",
-    "extract": "node scripts/extract-from-deployed.mjs"
+    "extract": "vite-node scripts/extract-from-deployed.ts",
+    "build:vercel": "npm run extract && tsc --noEmit && vite build --mode vercel",
+    "typecheck:server": "tsc -p tsconfig.server.json",
+    "dev:server": "vite-node scripts/dev-server.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.20.5",
+    "@vercel/blob": "^2.8.2",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "idb": "^8.0.0",
@@ -44,5 +48,8 @@
     "vite": "^6.0.3",
     "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

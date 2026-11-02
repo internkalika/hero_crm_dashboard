@@ -1,8 +1,8 @@
 // Source registry: what each known file looks like, how to recognise it and which canonical
 // fields it must provide. Column names in real exports drift over time, so every field lists
 // accepted aliases and users can override the mapping in the Import Centre.
-import type { Grain, SheetData, SourceFieldDef, SourceType } from '../types';
-import { normHeader } from '../util/parse';
+import type { Grain, SheetData, SourceFieldDef, SourceType } from '../types.js';
+import { normHeader } from '../util/parse.js';
 
 export const MAPPING_VERSION = 'm1';
 
@@ -188,6 +188,31 @@ export const SOURCES: Record<SourceType, SourceDef> = {
       orders: f('Orders', ['ORDER'], true),
       complaints: f('Complaints', ['COMPLAINT']),
       expenses: f('Expenses', ['EXPENSES']),
+    },
+  },
+  ds_usage: {
+    type: 'ds_usage',
+    label: 'DataSense Usage Report',
+    system: 'DataSense SFA',
+    grain: 'range',
+    description:
+      'App Usage Report: one row per order with the platform it was punched on (Mobile, Web or the Old App / SAP). Read from the "Orders" sheet; the "Summary" and "ASM-Employee-wise" sheets of the same workbook are used to reconcile and to show the report as supplied.',
+    filenameHints: [/app[\s_-]*usage/i, /usage[\s_-]*report/i],
+    expectedFiles: ['App_Usage_Report_ApriltoOct.xlsx'],
+    fields: {
+      date: f('Order date', ['Date', 'Order Date', 'Order Punched Date', 'Punched Date', 'Created Date', 'Created On'], true),
+      zone: f('Zone', ['Zone']),
+      asm: f('ASM', ['ASM', 'ASM Name']),
+      employee: f('Employee', ['Employee', 'Employee Name', 'Emp Name', 'Punched By Name']),
+      punchedBy: f('Punched by (role)', ['Punched By', 'Punched By Role', 'Role', 'Employee Role']),
+      dealer: f('Dealer', ['Dealer', 'Dealer Name', 'Customer', 'Customer Name'], true),
+      platform: f('Platform', ['Platform', 'Order Platform', 'Punched Platform'], true),
+      source: f('Source', ['Source', 'Order Source']),
+      status: f('Status', ['Status', 'Order Status'], true),
+      rejectReason: f('Reject reason', ['Reject Reason', 'Rejection Reason', 'Reject Remarks', 'Rejected Reason']),
+      items: f('Items', ['Items', 'No of Items', 'Item Count', 'Total Items', 'Line Items']),
+      total: f('Total', ['Total', 'Order Total', 'Order Value', 'Total Value', 'Value', 'Amount']),
+      orderNo: f('Order number', ['Order No', 'Order NO', 'Order Number', 'Order ID', 'SAP Order No']),
     },
   },
   dealer_sfa_activity: {

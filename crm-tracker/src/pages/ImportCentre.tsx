@@ -51,7 +51,7 @@ function SamplePreview({ sheet }: { sheet: SheetPreview }) {
 }
 
 export default function ImportCentre() {
-  const { data, client, reload } = useData();
+  const { data, client, reload, published } = useData();
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(0);
   const [items, setItems] = useState<ImportItem[]>([]);
@@ -439,7 +439,7 @@ export default function ImportCentre() {
               {ready.map((it) => <li key={it.analysis.id}><strong>{it.analysis.fileName}</strong>: {MODE_LABEL[it.mode ?? 'add']}</li>)}
             </ul>
             {busy === 'commit' && <Spinner label="Saving" />}
-            <Notice tone="neutral" title="This changes your browser only">Imported data lives in this browser’s IndexedDB. It does not change the deployed website and is not shared with colleagues, who need to import the same files themselves.</Notice>
+            <Notice tone="neutral" title="This changes your browser only">Imported data lives in this browser’s IndexedDB. It does not change the deployed website and is not shared with colleagues, who need to import the same files themselves.{published.configured && <> Sharing it with everyone is a separate step, done by an administrator in Data Management.</>}</Notice>
           </div>
         );
       default:
@@ -470,6 +470,7 @@ export default function ImportCentre() {
     <div>
       <PageHeader title="Data Import" />
       <p className="text-sm text-ink-2">Imported data is saved in <strong>this browser only</strong> and survives a reload. It does not change the website and is not shared: each person imports the same files.</p>
+      {published.configured && <p className="mt-1 text-sm text-ink-2">To share an import with everyone, an administrator publishes it afterwards from <Link className="text-hero-600 underline" to="/admin">Data Management</Link>.</p>}
       <div className="mt-4">
         <Stepper step={step} reached={reached} />
         {error && <div className="mb-3"><Notice tone="bad" title="Something went wrong">{error}</Notice></div>}

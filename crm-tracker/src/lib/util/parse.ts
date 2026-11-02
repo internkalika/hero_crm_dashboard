@@ -1,5 +1,5 @@
 // Low-level, deterministic parsing helpers. No business logic lives here.
-import type { Cell } from '../types';
+import type { Cell } from '../types.js';
 
 export const isBlank = (v: unknown): boolean =>
   v === null || v === undefined || (typeof v === 'string' && v.trim() === '');

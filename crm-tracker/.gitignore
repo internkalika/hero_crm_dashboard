@@ -7,10 +7,11 @@ data/
 
 # Generated: contains business data. Never commit.
 src/generated/snapshot.data.ts
-src/generated/usage.data.ts
 dist-single
 CRM_Tracker_Dashboard.html
 
 # Verification screenshots show real business data
 shots
 patch-oct2026/vercel/public/index.html
+.local-store
+dist-vercel

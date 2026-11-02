@@ -5,7 +5,7 @@ import { useDealerProfile } from '@/components/filters';
 import { DataTable } from '@/components/DataTable';
 import { PageHeader, InfoTip, Segmented } from '@/components/ui';
 import { DataGate } from '@/components/States';
-import { USAGE_REPORT } from '@usageReport';
+import type { DsUsageAsmRow, DsUsageRec, DsUsageReported } from '@/lib/types';
 // DataSense SFA: Usage Report (App Usage Report, April-October). Orders recorded per platform, NOT report accesses.
 import { Pick, Section, Seg, Tile } from './Landing';
 import { inr, int, pct } from '@/lib/metrics/landing';
@@ -19,25 +19,56 @@ const REJ = new Set(['Rejected by ASM', 'Rejected by SAP', 'SAP Order Not Create
 const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const mlab = (m: string) => `${MN[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
 
-let cache: any = null;
-export async function load() {
-  if (cache) return cache;
-  if (!USAGE_REPORT) throw new Error('No Usage Report is embedded in this build.');
-  const bin = atob(USAGE_REPORT);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const txt = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
-  cache = JSON.parse(txt);
-  return cache;
-}
-
 export interface Row { date: string; month: string; zone: string; asm: string; emp: string; role: string; dealer: string; platform: string; source: string; status: string; reason: string; items: number | null; total: number | null }
 
-export function decodeRows(d: any): Row[] {
-  return d.rows.map((a: any[]) => {
-    const g = (c: string, i: number) => (i < 0 ? '' : d.dict[c][i]);
-    return { date: a[0], month: a[0].slice(0, 7), zone: g('Zone', a[1]) || 'Not recorded', asm: g('ASM', a[2]), emp: g('Employee', a[3]), role: g('Punched By', a[4]) || 'Unknown', dealer: g('Dealer', a[5]), platform: g('Platform', a[6]), source: g('Source', a[7]), status: g('Status', a[8]), reason: g('Reject Reason', a[9]), items: a[10], total: a[11] } as Row;
-  });
+/** The order rows as the page works with them (blank zone shows as "Not recorded", blank role as "Unknown"). */
+export const rowsOf = (recs: DsUsageRec[]): Row[] =>
+  recs.map((r) => ({ date: r.date, month: r.month, zone: r.zone || 'Not recorded', asm: r.asm, emp: r.employee, role: r.punchedBy || 'Unknown', dealer: r.dealer, platform: r.platform, source: r.source, status: r.status, reason: r.rejectReason, items: r.items, total: r.total }));
+
+const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** "April–October 2026" for a range inside one year, "October 2026" for one month, "Nov 2025–Mar 2026" across years. */
+export function periodText(start: string | null, end: string | null): string {
+  if (!start || !end) return 'Period not known';
+  const [sy, sm, ey, em] = [+start.slice(0, 4), +start.slice(5, 7), +end.slice(0, 4), +end.slice(5, 7)];
+  if (sy === ey && sm === em) return `${FULL_MONTHS[sm - 1]} ${sy}`;
+  if (sy === ey) return `${FULL_MONTHS[sm - 1]}–${FULL_MONTHS[em - 1]} ${sy}`;
+  return `${FULL_MONTHS[sm - 1].slice(0, 3)} ${sy}–${FULL_MONTHS[em - 1].slice(0, 3)} ${ey}`;
+}
+
+export interface UsageView {
+  file: string;
+  reported: Record<string, string> | null;
+  summary: Record<string, number> | null;
+  employees: DsUsageAsmRow[] | null;
+  rows: Row[];
+  notes: string[];
+  period: string;
+  /** the period without its year when it lies in one year ("April–October") */
+  periodShort: string;
+  /** most orders without a value are archived ones (so the value is a lower bound) */
+  mostlyArchivedNoValue: boolean;
+}
+
+/** The imported Usage Report dataset, or null when none has been imported or published yet. */
+export function useUsageView(): UsageView | null {
+  const { data } = useData();
+  return useMemo(() => {
+    const meta = data.datasets.find((m) => m.source === 'ds_usage');
+    if (!meta) return null;
+    const ur = (meta.extra?.usageReport ?? null) as DsUsageReported | null;
+    const noValue = data.dsUsage.filter((r) => r.total === null);
+    return {
+      file: meta.fileName,
+      reported: ur?.reported ?? null,
+      summary: ur?.summary ?? null,
+      employees: ur?.employees ?? null,
+      rows: rowsOf(data.dsUsage),
+      notes: ur?.notes ?? [],
+      period: periodText(meta.periodStart, meta.periodEnd),
+      periodShort: periodText(meta.periodStart, meta.periodEnd).replace(/^([A-Za-z]+(?:–[A-Za-z]+)?) \d{4}$/, '$1'),
+      mostlyArchivedNoValue: noValue.length > 0 && noValue.filter((r) => r.status === 'Archived').length / noValue.length >= 0.5,
+    };
+  }, [data]);
 }
 
 function K(rows: Row[]) {
@@ -55,8 +86,8 @@ function K(rows: Row[]) {
   };
 }
 
-function Body({ d }: { d: any }) {
-  const rows: Row[] = useMemo(() => decodeRows(d), [d]);
+function Body({ d }: { d: UsageView }) {
+  const rows: Row[] = d.rows;
   const months: string[] = useMemo(() => [...new Set<string>(rows.map((r) => r.month))].sort(), [rows]);
   const [f, setF] = useState({ month: 'all', zones: [] as string[], platforms: [] as string[], roles: [] as string[] });
   const sub = useMemo(() => rows.filter((r) => (f.month === 'all' || r.month === f.month) && (!f.zones.length || f.zones.includes(r.zone)) && (!f.platforms.length || f.platforms.includes(r.platform)) && (!f.roles.length || f.roles.includes(r.role))), [rows, f]);
@@ -85,7 +116,7 @@ function Body({ d }: { d: any }) {
     { id: 'sfa', header: 'SFA orders', value: (e: any) => e.sfa, format: 'int' }, { id: 'sap', header: 'SAP orders', value: (e: any) => e.sap, format: 'int' }, { id: 'arc', header: 'Archived', value: (e: any) => e.archived, format: 'int' },
     { id: 'rej', header: 'Rejected', value: (e: any) => e.rejected, format: 'int' }, { id: 'val', header: 'Valid order value', value: (e: any) => e.value, format: 'inr' }, { id: 'ad', header: 'SFA adoption', value: (e: any) => e.adoption, format: 'pct' },
   ];
-  const S = d.summary;
+  const S: Record<string, number> = d.summary ?? {};
   const rec = [
     ['Total orders', S['Total orders'], kAll.total, 'int'], ['SFA app orders', S['SFA app orders'], kAll.sfa, 'int'], ['Manual SAP orders', S['Manual SAP orders'], kAll.sap, 'int'],
     ['SFA adoption %', S['SFA adoption %'], kAll.adoption, 'pct'], ['Net valid orders', S['Net valid orders'], kAll.net, 'int'], ['Valid SFA orders', S['Valid SFA orders'], kAll.validSfa, 'int'],
@@ -97,7 +128,7 @@ function Body({ d }: { d: any }) {
   return h('div', { className: 'lp' },
     h(PageHeader, { title: 'DataSense SFA: Usage Report' }),
     h('div', { className: 'lp-scope' },
-      h('span', { className: 'lp-chip red' }, 'April–October 2026'), h('span', { className: 'lp-chip' }, `Source: ${d.file}`), h('span', { className: 'lp-chip' }, `Generated ${d.meta['Generated on']}`),
+      h('span', { className: 'lp-chip red' }, d.period), h('span', { className: 'lp-chip' }, `Source: ${d.file}`), d.reported?.['Generated on'] && h('span', { className: 'lp-chip' }, `Generated ${d.reported['Generated on']}`),
       h('span', { className: 'lp-chip' }, 'Counts are orders recorded per platform, not report accesses, downloads or successful transactions')),
     h('div', { className: 'lp-filters' },
       h(Seg, { label: 'Month', value: f.month, onChange: (x: string) => setF({ ...f, month: x }), options: [{ value: 'all', label: 'All' }, ...months.map((m) => ({ value: m, label: mlab(m).slice(0, 3) }))] }),
@@ -105,7 +136,7 @@ function Body({ d }: { d: any }) {
       h(Pick, { label: 'Platform', all: 'All platforms', value: f.platforms, onChange: (x: string[]) => setF({ ...f, platforms: x }), options: opts('platform') }),
       h(Pick, { label: 'Punched by', all: 'All roles', value: f.roles, onChange: (x: string[]) => setF({ ...f, roles: x }), options: opts('role') }),
       (f.month !== 'all' || f.zones.length > 0 || f.platforms.length > 0 || f.roles.length > 0) && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ month: 'all', zones: [], platforms: [], roles: [] }) }, 'Reset filters')),
-    h(Section, { id: 'us-k', title: 'Usage summary', sub: f.month === 'all' ? 'April–October 2026' : mlab(f.month) },
+    h(Section, { id: 'us-k', title: 'Usage summary', sub: f.month === 'all' ? d.period : mlab(f.month) },
       h('div', { className: 'lp-tiles4' },
         h(Tile, { l: 'Orders recorded', v: int(k.total), s: 'One row per order in the report' }),
         h(Tile, { l: 'SFA app orders', v: int(k.sfa), s: `${pct(k.adoption)} of orders · Mobile + Web` }),
@@ -114,8 +145,8 @@ function Body({ d }: { d: any }) {
         h(Tile, { l: 'Net valid orders', v: int(k.net), s: 'Not archived, not rejected' }),
         h(Tile, { l: 'Valid SFA orders', v: int(k.validSfa), s: `${pct(k.net ? k.validSfa / k.net : null)} of net valid orders` }),
         h(Tile, { l: 'SFA rejection rate', v: pct(k.sfaRejRate), s: `${int(k.sfaRej)} of ${int(k.sfa)} SFA orders (rejected by ASM / SAP or SAP order not created)`, tone: 'bad' }),
-        h(Tile, { l: 'Orders without a value', v: int(k.noValue), s: 'The file gives no value for these (mostly archived); they are not treated as zero' }))),
-    h(Section, { id: 'us-t', title: 'April–October trend', sub: 'Month filter does not apply here; zone, platform and role filters do.' },
+        h(Tile, { l: 'Orders without a value', v: int(k.noValue), s: `The file gives no value for these${d.mostlyArchivedNoValue ? ' (mostly archived)' : ''}; they are not treated as zero` }))),
+    h(Section, { id: 'us-t', title: `${d.periodShort} trend`, sub: 'Month filter does not apply here; zone, platform and role filters do.' },
       h('div', { className: 'lp-grid2' },
         h(ChartCard, { title: 'Orders by platform and month', table: { columns: [{ header: 'Month' }, ...plats.map((p) => ({ header: p, format: 'int' }))], rows: monthly.map((m: any) => [m.label, ...plats.map((p) => m[p])]) } },
           h(StackedBarsChart, { data: monthly, series: [{ key: 'Mobile', label: 'Mobile (SFA)', color: RED }, { key: 'Web', label: 'Web (SFA)', color: BLUE }, { key: 'Old App', label: 'Old App (SAP)', color: GREY }], format: 'int', height: 260 })),
@@ -129,18 +160,14 @@ function Body({ d }: { d: any }) {
         h(ChartCard, { title: 'Top employees by SFA orders', table: { columns: [{ header: 'Employee' }, { header: 'SFA orders', format: 'int' }], rows: topEmp.map((s: any) => [s.label, s.value]) } }, h(BarsChart, { data: topEmp, format: 'int', color: RED, seriesName: 'SFA orders' }))),
       reasons.length > 0 && h('div', { style: { marginTop: '1rem' } }, h(ChartCard, { title: 'Most common rejection reasons', subtitle: 'Free text typed by approvers, lower-cased and trimmed; similar wordings are not merged.', table: { columns: [{ header: 'Reason' }, { header: 'Orders', format: 'int' }], rows: reasons.map((s: any) => [s.label, s.value]) } }, h(BarsChart, { data: reasons, format: 'int', seriesName: 'Orders' })))),
     h(Section, { id: 'us-e', title: 'Employees' }, h(DataTable, { title: 'Orders by employee (follows the filters)', rows: emps, columns: ecols, getRowId: (e: any) => e.emp, exportName: 'datasense_usage_by_employee', initialSort: { id: 'total', desc: true }, pageSize: 10, searchPlaceholder: 'Search employees…' })),
-    h(Section, { id: 'us-r', title: 'Report as supplied', sub: 'The ASM-Employee-wise sheet exactly as reported (team totals and own-order rows overlap, so do not add them), and the Summary sheet reconciled with the order rows.' },
-      h(DataTable, { title: 'ASM-Employee-wise (as reported)', rows: d.employees, columns: rcols, getRowId: (_e: any, i: number) => String(i), exportName: 'datasense_usage_asm_employee_wise', pageSize: 10, searchPlaceholder: 'Search…' }),
-      h('div', { className: 'lp-card', style: { marginTop: '1rem', overflowX: 'auto' } }, h('table', { className: 'lp-mt' }, h('thead', null, h('tr', null, h('th', null, 'Summary sheet metric'), h('th', null, 'As reported'), h('th', null, 'Recomputed from the order rows'), h('th', null, 'Check'))),
+    (d.employees || d.summary) && h(Section, { id: 'us-r', title: 'Report as supplied', sub: [d.employees && 'The ASM-Employee-wise sheet exactly as reported (team totals and own-order rows overlap, so do not add them)', d.summary && 'the Summary sheet reconciled with the order rows'].filter(Boolean).join(', and ') + '.' },
+      d.employees && h(DataTable, { title: 'ASM-Employee-wise (as reported)', rows: d.employees, columns: rcols, getRowId: (_e: any, i: number) => String(i), exportName: 'datasense_usage_asm_employee_wise', pageSize: 10, searchPlaceholder: 'Search…' }),
+      d.summary && h('div', { className: 'lp-card', style: { marginTop: '1rem', overflowX: 'auto' } }, h('table', { className: 'lp-mt' }, h('thead', null, h('tr', null, h('th', null, 'Summary sheet metric'), h('th', null, 'As reported'), h('th', null, 'Recomputed from the order rows'), h('th', null, 'Check'))),
         h('tbody', null, rec.map((r: any, i: number) => h('tr', { key: r[0] }, h('th', null, r[0]), h('td', null, fmt(r[1], r[3])), h('td', null, fmt(r[2], r[3])), h('td', null, note(i)))))),
-        h('p', { className: 'lp-foot' }, '3 order numbers appear on two rows each with different dealers; every row is kept as its own order. Archived orders mostly carry no value in the file, so order value is a lower bound.'))));
+        h('p', { className: 'lp-foot' }, [...d.notes, d.mostlyArchivedNoValue ? 'Archived orders mostly carry no value in the file, so order value is a lower bound.' : 'Orders without a value are not treated as zero, so order value is a lower bound.'].join(' ')))));
 }
 
 export function UsagePage() {
-  const [d, setD] = useState<any>(cache);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { if (!d) load().then(setD).catch((e: any) => setErr(String(e?.message ?? e))); }, []);
-  if (err) return h('div', { className: 'lp-note' }, `The usage data could not be read: ${err}`);
-  if (!d) return h('div', { className: 'p-8' }, 'Loading usage report…');
-  return h(Body, { d });
+  const d = useUsageView();
+  return h(DataGate, { need: ['ds_usage'], what: 'the DataSense Usage Report' }, d ? h(Body, { d }) : null);
 }

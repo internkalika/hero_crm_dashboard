@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Gauge, GitCompareArrows, Headset, Inbox, Layers, LayoutDashboard, Smile, Upload, Users, ClipboardList, type LucideIcon } from 'lucide-react';
+import { BarChart3, Boxes, Database, Gauge, GitCompareArrows, Headset, Inbox, Layers, LayoutDashboard, Smile, Upload, Users, ClipboardList, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -41,6 +41,7 @@ export const NAV: NavGroup[] = [
   { id: 'issues', label: 'Issue Tracker', icon: ClipboardList, to: '/issues' },
   { id: 'overview', label: 'Overall Summary', icon: LayoutDashboard, to: '/overview' },
   { id: 'import', label: 'Data Import', icon: Upload, to: '/import' },
+  { id: 'admin', label: 'Data Management', icon: Database, to: '/admin' },
 ];
 
 export function crumbsFor(path: string): Array<{ label: string; to?: string }> {

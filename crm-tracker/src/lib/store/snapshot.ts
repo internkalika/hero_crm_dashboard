@@ -5,6 +5,7 @@
 // There is no button to load the snapshot again or to wipe everything; the snapshot is only a starting point.
 import { SNAPSHOT } from '@snapshot';
 import type { AppData, DatasetPayload } from '../types';
+import { markClean } from '../sync/state';
 import { addHistory, assembleAppData, kvGet, kvSet, listMeta, removeDataset, saveDataset } from './db';
 
 export interface SnapshotBundle {
@@ -31,6 +32,7 @@ export async function decodeSnapshot(): Promise<DatasetPayload[]> {
 export async function loadSnapshotIntoStore(): Promise<number> {
   const payloads = await decodeSnapshot();
   for (const p of payloads) await saveDataset(p);
+  await markClean(payloads.map((p) => p.meta));
   await kvSet('snapshotSeededAt', new Date().toISOString());
   await kvSet('snapshotVersion', SNAPSHOT?.info.label);
   if (payloads.length) {
@@ -46,6 +48,8 @@ export async function loadSnapshotIntoStore(): Promise<number> {
 
 /** Datasets that a newer embedded snapshot replaces once in a browser that was seeded by an older one. */
 const REFRESHED_BY_NEWER_SNAPSHOT = ['ds_orders', 'ds_complaints', 'issue_tracker'];
+/** Datasets a newer snapshot adds only where the browser has none yet (an imported one is never overwritten). */
+const ADDED_IF_MISSING = ['ds_usage'];
 
 /**
  * First open: an empty store receives the snapshot. A browser that already holds data is never refilled, with one
@@ -67,7 +71,15 @@ export async function seedIfFirstOpen(): Promise<void> {
     return;
   }
   for (const m of await listMeta()) if (REFRESHED_BY_NEWER_SNAPSHOT.includes(m.source)) await removeDataset(m.id);
-  for (const p of await decodeSnapshot()) if (REFRESHED_BY_NEWER_SNAPSHOT.includes(p.meta.source)) await saveDataset(p);
+  const have = new Set((await listMeta()).map((m) => m.source));
+  const refreshed: DatasetPayload[] = [];
+  for (const p of await decodeSnapshot()) {
+    if (REFRESHED_BY_NEWER_SNAPSHOT.includes(p.meta.source) || (ADDED_IF_MISSING.includes(p.meta.source) && !have.has(p.meta.source))) {
+      await saveDataset(p);
+      refreshed.push(p);
+    }
+  }
+  await markClean(refreshed.map((p) => p.meta));
   await kvSet('snapshotVersion', version);
 }
 

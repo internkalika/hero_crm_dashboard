@@ -32,10 +32,11 @@ describe('menu', () => {
       'Issue Tracker',
       'Overall Summary',
       'Data Import',
+      'Data Management',
     ]);
     expect(NAV[0].to).toBe('/');
     expect(NAV.find((g) => g.label === 'Overall Summary')?.to).toBe('/overview');
-    expect(NAV.map((g) => g.id).slice(-2)).toEqual(['overview', 'import']);
+    expect(NAV.map((g) => g.id).slice(-3)).toEqual(['overview', 'import', 'admin']); // Data Management is the one entry added after Data Import
     expect(crumbsFor('/').map((c) => c.label)).toEqual(['Home', 'Dealer App vs DataSense SFA']);
   });
 

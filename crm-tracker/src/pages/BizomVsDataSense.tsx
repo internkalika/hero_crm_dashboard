@@ -9,7 +9,7 @@ import { DataGate } from '@/components/States';
 // The two measure different things (report accesses vs orders), so they are never added or divided by each other;
 // they are compared on people, zones and months both cover.
 import { Modal, Pick, Section, Seg, Tile, clk } from './Landing';
-import { Row, decodeRows, load } from './UsageReport';
+import { Row, useUsageView } from './UsageReport';
 import { int, pct } from '@/lib/metrics/landing';
 
 // The patch pages are written with plain createElement calls; props are checked at run time by the host components.
@@ -27,8 +27,6 @@ const zn = (z: string | null | undefined) => {
   const f = ZONES.find((x) => x.toLowerCase() === t);
   return f ?? 'Other';
 };
-
-let dsCache: Row[] | null = null;
 
 function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
   const bz: any[] = useMemo(() => (data.usage as any[]).filter((r) => settings.includeTestAccounts || !(r.flags ?? []).includes('test_or_service_account')), [data.usage, settings.includeTestAccounts]);
@@ -142,9 +140,6 @@ function Body({ data, settings, ds }: { data: any; settings: any; ds: Row[] }) {
 
 export function BizomVsDataSensePage() {
   const { data, settings } = useData();
-  const [ds, setDs] = useState<Row[] | null>(dsCache);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { if (!ds) load().then((d: any) => { dsCache = decodeRows(d); setDs(dsCache); }).catch((e: any) => setErr(String(e?.message ?? e))); }, []);
-  return h(DataGate, { need: ['bizom_usage'], what: 'the Bizom SFA vs DataSense SFA usage comparison' },
-    err ? h('div', { className: 'lp-note' }, `The DataSense Usage Report could not be read: ${err}`) : !ds ? h('div', { className: 'p-8' }, 'Loading usage data…') : h(Body, { data, settings, ds }));
+  const usage = useUsageView();
+  return h(DataGate, { need: ['bizom_usage', 'ds_usage'], what: 'the Bizom SFA vs DataSense SFA usage comparison' }, usage ? h(Body, { data, settings, ds: usage.rows }) : null);
 }

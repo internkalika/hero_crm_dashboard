@@ -10,6 +10,7 @@ import type {
   DealerOrderLine,
   DQIssue,
   DsOrder,
+  DsUsageRec,
   EmployeeActivityRec,
   FocusRec,
   IssueRec,
@@ -165,6 +166,9 @@ export function assembleAppData(version: number, items: Array<{ meta: DatasetMet
         break;
       case 'ds_employee_activity':
         data.dsEmployees.push(...(records as EmployeeActivityRec[]));
+        break;
+      case 'ds_usage':
+        data.dsUsage.push(...(records as DsUsageRec[]));
         break;
       case 'dealer_sfa_activity':
         data.dealerSfa.push(...(records as EmployeeActivityRec[]));

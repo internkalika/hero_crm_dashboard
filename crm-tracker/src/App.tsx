@@ -15,6 +15,7 @@ const UsagePage = lazy(() => import('./pages/UsageReport').then((m) => ({ defaul
 const HeroSmiles = lazy(() => import('./pages/HeroSmiles'));
 const BizomVsDataSensePage = lazy(() => import('./pages/BizomVsDataSense').then((m) => ({ default: m.BizomVsDataSensePage })));
 const ImportCentre = lazy(() => import('./pages/ImportCentre'));
+const DataManagement = lazy(() => import('./pages/DataManagement'));
 
 /** Pages that moved: old links keep working and keep their filters. */
 function MovedTo({ to }: { to: string }) {
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="compare/dealer-vs-datasense" element={<MovedTo to="/" />} />
           <Route path="compare/bizom-vs-sfa" element={<BizomVsDataSensePage />} />
           <Route path="import" element={<ImportCentre />} />
+          <Route path="admin" element={<DataManagement />} />
           <Route path="*" element={<div className="p-8">Page not found.</div>} />
         </Route>
       </Routes>

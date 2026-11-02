@@ -16,7 +16,7 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"], "@snapshot": ["src/generated/snapshot.empty.ts"], "@usageReport": ["src/generated/usage.empty.ts"], "@workerSpawn": ["src/workers/spawn.ts"] },
+    "paths": { "@/*": ["src/*"], "@snapshot": ["src/generated/snapshot.empty.ts"], "@workerSpawn": ["src/workers/spawn.ts"] },
     "types": ["vite/client", "node"]
   },
   "include": ["src", "tests", "vite.config.ts"]

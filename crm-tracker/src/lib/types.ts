@@ -10,6 +10,7 @@ export type SourceType =
   | 'ds_orders'
   | 'ds_complaints'
   | 'ds_employee_activity'
+  | 'ds_usage'
   | 'dealer_sfa_activity'
   | 'loyalty_snapshot'
   | 'focus_liquidation';
@@ -277,6 +278,59 @@ export interface UsageRec {
   flags: string[];
 }
 
+/* ------------------------- DataSense Usage Report (App Usage Report) ------------------------- */
+
+/** One order of the DataSense App Usage Report ("Orders" sheet). Counts are orders recorded per platform. */
+export interface DsUsageRec {
+  /** order no + dealer when the file has an order number, otherwise date|employee|dealer|items|total + occurrence */
+  key: string;
+  datasetId: string;
+  rowNo: number;
+  /** YYYY-MM-DD */
+  date: string;
+  month: string;
+  zone: string;
+  asm: string;
+  employee: string;
+  /** role of the person who punched the order (ASM / RSE / RSM / Other / Unknown) */
+  punchedBy: string;
+  dealer: string;
+  /** Mobile | Web | Old App */
+  platform: string;
+  /** SFA | SAP */
+  source: string;
+  status: string;
+  rejectReason: string;
+  items: number | null;
+  total: number | null;
+  orderNo?: string | null;
+}
+
+/** One row of the report's ASM-Employee-wise sheet, as reported (team totals and own-order rows overlap). */
+export interface DsUsageAsmRow {
+  zone: string;
+  name: string;
+  level: string;
+  sfa: number | null;
+  sap: number | null;
+  archived: number | null;
+  rejected: number | null;
+  value: number | null;
+  adoption: number | null;
+}
+
+/** What a Usage Report dataset keeps besides its order rows (dataset meta.extra.usageReport). */
+export interface DsUsageReported {
+  /** Period / Zone / Generated on, as printed by the report */
+  reported: Record<string, string> | null;
+  /** the report's Summary sheet: label -> value */
+  summary: Record<string, number> | null;
+  /** the report's ASM-Employee-wise sheet */
+  employees: DsUsageAsmRow[] | null;
+  /** facts about the file worth printing under the reconciliation (for example repeated order numbers) */
+  notes?: string[];
+}
+
 /* -------------------------------- Issue tracker -------------------------------- */
 
 export type IssueStatusGroup = 'resolved' | 'in_progress' | 'waiting' | 'unmapped';
@@ -389,6 +443,7 @@ export interface AppData {
   usage: UsageRec[];
   issues: IssueRec[];
   dsEmployees: EmployeeActivityRec[];
+  dsUsage: DsUsageRec[];
   dealerSfa: EmployeeActivityRec[];
   loyalty: LoyaltyRec[];
   focus: FocusRec[];
@@ -405,6 +460,7 @@ export const emptyAppData = (): AppData => ({
   usage: [],
   issues: [],
   dsEmployees: [],
+  dsUsage: [],
   dealerSfa: [],
   loyalty: [],
   focus: [],
