@@ -24,7 +24,7 @@ type TabId = 'usage' | 'reports' | 'users';
 const DIM_LABELS: Record<string, string> = { month: 'Month', report: 'Report', kind: 'Account type', designation: 'Designation', zone: 'Zone', user: 'User', kpi: 'Measure' };
 
 export default function BizomUsage() {
-  const { data, period, settings, asOf } = useData();
+  const { data, period, settings, asOf, focusMonth } = useData();
   const cf = useCrossFilter();
   const [tabRaw, setTab] = useUrlValue('tab', 'usage');
   const tab = (['usage', 'reports', 'users'].includes(tabRaw) ? tabRaw : 'usage') as TabId;
@@ -37,7 +37,6 @@ export default function BizomUsage() {
   const filtered = useMemo(() => {
     const f = cf.filters;
     return base.filter((u) => {
-      if (!cf.ok('month', u.month)) return false;
       if (!cf.ok('report', (u.reportName || u.reportId))) return false;
       if (!cf.ok('kind', u.accountKind)) return false;
       if (!cf.ok('designation', u.designation)) return false;
@@ -52,7 +51,6 @@ export default function BizomUsage() {
   const filterFields: FilterField[] = useMemo(() => {
     const o = { noCounts: true } as const;
     return [
-      { dim: 'month', label: 'Month', allLabel: 'All months', options: buildOptions(base, (u) => u.month, { ...o, sort: 'value', label: (k) => monthKeyLabel(k) }) },
       { dim: 'zone', label: 'Zone', allLabel: 'All zones', options: buildOptions(base, (u) => u.zone ?? 'Not specified', { ...o, sort: 'label' }) },
       { dim: 'kind', label: 'Account type', allLabel: 'All account types', options: buildOptions(base, (u) => u.accountKind, { ...o, sort: ['Field staff', 'Distributor', 'Company / admin'] }) },
       { dim: 'designation', label: 'Designation', allLabel: 'All designations', search: true, options: buildOptions(base, (u) => u.designation, { ...o, sort: 'label' }) },
@@ -135,11 +133,11 @@ export default function BizomUsage() {
 
         {tab === 'usage' && (
           <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title="Report accesses by month" subtitle="Click a month to filter." table={{ columns: [{ header: 'Month' }, { header: 'Accesses', format: 'int' }, { header: 'Active users', format: 'int' }, { header: 'Reports', format: 'int' }], rows: monthly.map((m) => [m.label, m.accesses, m.users, m.reports]) }}>
-              <TrendChart data={monthly.map((m) => ({ key: m.month, label: m.label, accesses: m.accesses }))} series={[{ key: 'accesses', label: 'Recorded accesses', color: SERIES_COLOR.bizom }]} onSelect={(key, lab) => cf.toggle('month', key, lab)} />
+            <ChartCard title="Report accesses by month" subtitle="Click a month to focus the reporting range on it." table={{ columns: [{ header: 'Month' }, { header: 'Accesses', format: 'int' }, { header: 'Active users', format: 'int' }, { header: 'Reports', format: 'int' }], rows: monthly.map((m) => [m.label, m.accesses, m.users, m.reports]) }}>
+              <TrendChart data={monthly.map((m) => ({ key: m.month, label: m.label, accesses: m.accesses }))} series={[{ key: 'accesses', label: 'Recorded accesses', color: SERIES_COLOR.bizom }]} onSelect={(key, lab) => focusMonth(key)} />
             </ChartCard>
-            <ChartCard title="Active users by month" subtitle="Users with at least one recorded access. Click a month to filter." table={{ columns: [{ header: 'Month' }, { header: 'Active users', format: 'int' }], rows: monthly.map((m) => [m.label, m.users]) }}>
-              <BarsChart layout="vertical" color={SERIES_COLOR.bizom} seriesName="Active users" activeKey={cf.filters.month} onSelect={(key, lab) => cf.toggle('month', key, lab)} data={monthly.map((m) => ({ key: m.month, label: m.label, value: m.users }))} />
+            <ChartCard title="Active users by month" subtitle="Users with at least one recorded access. Click a month to focus the reporting range on it." table={{ columns: [{ header: 'Month' }, { header: 'Active users', format: 'int' }], rows: monthly.map((m) => [m.label, m.users]) }}>
+              <BarsChart layout="vertical" color={SERIES_COLOR.bizom} seriesName="Active users" onSelect={(key, lab) => focusMonth(key)} data={monthly.map((m) => ({ key: m.month, label: m.label, value: m.users }))} />
             </ChartCard>
             <ChartCard title="Most-used reports" subtitle="Top 15 by recorded accesses. Click a bar to filter." table={{ columns: [{ header: 'Report' }, { header: 'Accesses', format: 'int' }, { header: 'Users', format: 'int' }, { header: 'Cumulative', format: 'pct' }], rows: reports.slice(0, 15).map((r) => [r.reportName, r.accesses, r.users, r.cumShare]) }}>
               <BarsChart color={SERIES_COLOR.bizom} seriesName="Recorded accesses" activeKey={cf.filters.report} onSelect={(key) => cf.toggle('report', key)} data={reports.slice(0, 15).map((r) => ({ key: r.reportName, label: r.reportName.replace(/\s+/g, ' '), value: r.accesses }))} />

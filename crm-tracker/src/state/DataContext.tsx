@@ -3,13 +3,15 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppData, Settings, defaultSettings, emptyAppData } from '../lib/types';
 import { HistoryEntry, kvGet, kvSet, listHistory, loadAppData } from '../lib/store/db';
-import { ALL_PERIOD, Period, availableMonths, customPeriod, periodOptions } from '../lib/metrics/period';
+import { SNAPSHOT } from '@snapshot';
+import { LastUpdated, resolveLastUpdated } from '../lib/sync/lastUpdated';
+import { ALL_PERIOD, Period, availableMonths, availableSpan, customPeriod, periodOptions } from '../lib/metrics/period';
 import type { Crosswalk } from '../lib/metrics/comparison';
 import { IngestClient, createWorkerClient } from '../lib/ingest/client';
 import { seedIfFirstOpen, snapshotAppData } from '../lib/store/snapshot';
 import { SyncResult, syncPublished } from '../lib/sync/published';
 import { syncEnabled } from '../lib/sync/api';
-import { todayIso } from '../lib/util/parse';
+import { monthEnd, todayIso } from '../lib/util/parse';
 
 interface Ctx {
   data: AppData;
@@ -22,8 +24,14 @@ interface Ctx {
   months: string[];
   periods: Period[];
   period: Period;
+  /** first and last day the loaded data covers (the calendar offers nothing outside it) */
+  span: { min: string; max: string } | null;
+  /** when the data on screen was last published: the published version's timestamp, else the embedded snapshot's build data; never the time of a page visit */
+  lastUpdated: LastUpdated;
   setPeriodId: (id: string) => void;
   setCustomRange: (from: string, to: string) => void;
+  /** narrows the reporting range to one calendar month (what clicking a month bar in a chart does) */
+  focusMonth: (month: string) => void;
   crosswalk: Crosswalk;
   setCrosswalk: (c: Crosswalk) => void;
   history: HistoryEntry[];
@@ -147,6 +155,8 @@ export function DataProvider({ children, clientFactory }: { children: ReactNode;
     });
   }, []);
 
+  const span = useMemo(() => availableSpan(data), [data]);
+  const lastUpdated = useMemo<Ctx['lastUpdated']>(() => resolveLastUpdated(published.publishedAt, SNAPSHOT?.info.builtAt), [published.publishedAt]);
   const lastRefresh = useMemo(() => data.datasets.reduce<string | null>((a, d) => (!a || d.importedAt > a ? d.importedAt : a), null), [data.datasets]);
 
   const value: Ctx = {
@@ -159,9 +169,16 @@ export function DataProvider({ children, clientFactory }: { children: ReactNode;
     months,
     periods,
     period,
+    span,
+    lastUpdated,
     setPeriodId: (id) => setPeriodIdState(id),
     setCustomRange: (from, to) => {
       const p = customPeriod(from, to);
+      setCustom(p);
+      setPeriodIdState(p.id);
+    },
+    focusMonth: (m) => {
+      const p = customPeriod(`${m}-01`, monthEnd(m));
       setCustom(p);
       setPeriodIdState(p.id);
     },

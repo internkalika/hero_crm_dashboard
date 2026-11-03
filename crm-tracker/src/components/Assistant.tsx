@@ -101,7 +101,7 @@ export function Assistant() {
         </button>
       )}
       {open && (
-        <section role="dialog" aria-label="Data assistant" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)} className="fixed bottom-3 right-3 z-40 flex h-[min(640px,calc(100vh-1.5rem))] w-[min(420px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop">
+        <section role="dialog" aria-label="Data assistant" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)} className="fixed bottom-3 right-3 z-40 flex h-[min(640px,calc(100vh-1.5rem))] w-[min(420px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-surface shadow-pop">
           <header className="flex items-start justify-between gap-2 border-b border-slate-200 bg-hero-600 px-4 py-3 text-white">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold leading-tight">Data assistant</h2>
@@ -142,7 +142,7 @@ export function Assistant() {
             })}
           </div>
 
-          <form onSubmit={submit} className="flex items-center gap-2 border-t border-slate-200 bg-white p-2.5">
+          <form onSubmit={submit} className="flex items-center gap-2 border-t border-slate-200 bg-surface p-2.5">
             <label htmlFor="assistant-input" className="sr-only">Ask a question about the data</label>
             <input ref={field} id="assistant-input" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={keys} placeholder="Ask about growth, a dealer, complaints…" autoComplete="off" className="input min-w-0 flex-1 py-2 text-sm" />
             <button type="submit" disabled={busy || !text.trim()} aria-label="Send" className="btn btn-primary btn-sm h-9 w-9 shrink-0 justify-center p-0">
@@ -156,14 +156,14 @@ export function Assistant() {
 }
 
 function Bubble({ children, tone }: { children: React.ReactNode; tone?: 'bad' }) {
-  return <div className={clsx('mr-4 rounded-lg rounded-bl-sm border bg-white px-3 py-2.5 shadow-card', tone === 'bad' ? 'border-bad/40' : 'border-slate-200')}>{children}</div>;
+  return <div className={clsx('mr-4 rounded-lg rounded-bl-sm border bg-surface px-3 py-2.5 shadow-card', tone === 'bad' ? 'border-bad/40' : 'border-slate-200')}>{children}</div>;
 }
 
 function Chips({ items, onPick, disabled }: { items: string[]; onPick: (q: string) => void; disabled?: boolean }) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
       {items.map((q) => (
-        <button key={q} type="button" disabled={disabled} onClick={() => onPick(q)} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-left text-xs font-medium text-ink-2 hover:border-hero-600 hover:text-hero-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 disabled:opacity-50">
+        <button key={q} type="button" disabled={disabled} onClick={() => onPick(q)} className="rounded-full border border-slate-300 bg-surface px-2.5 py-1 text-left text-xs font-medium text-ink-2 hover:border-hero-600 hover:text-hero-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 disabled:opacity-50">
           {q}
         </button>
       ))}

@@ -11,7 +11,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }: { o
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/30" onMouseDown={onClose}>
-      <aside role="dialog" aria-modal="true" aria-label={title} className="flex h-full w-full max-w-xl flex-col bg-white shadow-pop" onMouseDown={(e) => e.stopPropagation()}>
+      <aside role="dialog" aria-modal="true" aria-label={title} className="flex h-full w-full max-w-xl flex-col bg-surface shadow-pop" onMouseDown={(e) => e.stopPropagation()}>
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold">{title}</h2>

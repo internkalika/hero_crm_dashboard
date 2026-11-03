@@ -1,5 +1,6 @@
 // Dealer App vs DataSense SFA: calculation layer for the landing page.
-// Scope: the dealers that are on the Dealer App, September-October only, the same dates for both channels.
+// Scope: the dealers that are on the Dealer App, every month the Dealer App has data for, the same dates for both channels.
+// Months are never listed here: they come from the Dealer App order dates, so a newly published month appears by itself.
 // Every figure is computed from the imported records; nothing is estimated or back-filled.
 
 export type Ch = 'app' | 'ds';
@@ -65,8 +66,15 @@ export interface Ctx {
 
 const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 export const monthName = (m: string) => MON[+m.slice(5, 7) - 1] ?? m;
-export const monthShort = (m: string) => monthName(m).slice(0, 3);
+/** Set when the months in view span more than one year, so a label can never be read as the wrong year ("Nov 26" / "Nov 27"). */
+let spansYears = false;
+export const monthShort = (m: string) => monthName(m).slice(0, 3) + (spansYears ? ` ${m.slice(2, 4)}` : '');
 const dayNum = (d: string) => +d.slice(8, 10);
+const addDaysIso = (iso: string, n: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 const daysBetween = (a: string, b: string) => Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5) + 1;
 const monthEnd = (m: string) => `${m}-${String(new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate()).padStart(2, '0')}`;
 
@@ -84,11 +92,22 @@ export function buildCtx(data: any): Ctx | null {
   const dates = appLines.map((l) => l.orderDate as string).sort();
   const launch = dates[0];
   const cutoff = dates[dates.length - 1];
-  const months = [...new Set<string>(appLines.map((l) => l.month as string).filter(Boolean))].sort().slice(0, 2);
+  const months = [...new Set<string>(appLines.map((l) => l.month as string).filter(Boolean))].sort();
+  spansYears = new Set(months.map((m) => m.slice(0, 4))).size > 1;
   const wins: Record<string, Win> = {};
+  // A month's window ends where the Dealer App export for that month ends (the same dates for both channels). An export that reaches
+  // within two days of the month end counts as the whole month (the rule the rest of the dashboard uses for "complete"). So a month's
+  // figures do not change when a later month is added: October keeps its 1-21 Oct window once November arrives.
+  const lastIn = new Map<string, string>();
+  for (const d of dates) lastIn.set(d.slice(0, 7), d);
+  const reach = (m: string) => {
+    const last = lastIn.get(m) ?? monthEnd(m);
+    const end = monthEnd(m);
+    return last >= addDaysIso(end, -2) ? end : last;
+  };
   months.forEach((m, i) => {
     const from = i === 0 ? launch : `${m}-01`;
-    const to = i === months.length - 1 ? (cutoff < monthEnd(m) ? cutoff : monthEnd(m)) : monthEnd(m);
+    const to = reach(m);
     wins[m] = { month: m, from, to, days: daysBetween(from, to), label: `${monthShort(m)} ${dayNum(from)}–${dayNum(to)}`, mlabel: monthName(m) };
   });
   const keys = new Set(dealers.map((d) => d.key));
@@ -183,8 +202,14 @@ export function agg(os: Ord[]): Agg {
   };
 }
 
+export interface DateRange {
+  from: string | null;
+  to: string | null;
+}
+
 export interface Filters {
-  month: 'both' | string;
+  /** the reporting range chosen with the calendar (null = everything available) */
+  range: DateRange | null;
   dealers: string[]; // empty = all
   channel: 'both' | Ch;
   models: string[]; // empty = all
@@ -272,6 +297,8 @@ export function buildTrend(ctx: Ctx, dealerKeys: string[], appAll: Ord[]): Trend
     const mo = +m.slice(5, 7);
     m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
   }
+  spansYears = spansYears || new Set(list.map((m) => m.slice(0, 4))).size > 1;
+  const lab = (m: string) => monthShort(m);
   return list.map((m) => {
     const win = ctx.wins[m];
     const from = win ? win.from : `${m}-01`;
@@ -284,7 +311,7 @@ export function buildTrend(ctx: Ctx, dealerKeys: string[], appAll: Ord[]): Trend
       const v = o.value ?? 0;
       dsO.push({ ch: 'ds', id: o.orderNo, dealer: o.dealerKey, date: o.orderDate, month: m, status: o.statusGroup === 'rejected' ? 'rejected' : v > 0 ? 'valid' : 'zero', raw: o.rawStatus, value: v, qty: o.cyclesQty ?? 0, cv: o.cyclesValue ?? 0, lines: [], sap: o.orderNo, dup: false, sapPending: false, flags: [] });
     }
-    return { month: m, label: monthShort(m), app: win ? agg(appAll.filter((o) => o.month === m)) : null, ds: agg(dsO) };
+    return { month: m, label: lab(m), app: win ? agg(appAll.filter((o) => o.month === m)) : null, ds: agg(dsO) };
   });
 }
 
@@ -292,6 +319,8 @@ export interface View {
   ctx: Ctx;
   f: Filters;
   months: string[]; // months shown
+  /** previous month and latest month of those shown: what the movement figures compare */
+  cmp: [string, string];
   both: boolean;
   dealerKeys: string[];
   show: { app: boolean; ds: boolean };
@@ -315,13 +344,28 @@ export interface View {
   periodLabel: string;
 }
 
+/** The month before the latest one and the latest: what a movement compares. With exactly two months this is (first, second). */
+export const cmpPair = (months: string[]): [string, string] => [months[Math.max(0, months.length - 2)], months[months.length - 1]];
+
+/** "November 2026", "September–November 2026" or "Dec 2026 – Feb 2027" (the year always comes from the data). */
+export function monthSpan(a: string, b: string): string {
+  if (a === b) return `${monthName(a)} ${a.slice(0, 4)}`;
+  if (a.slice(0, 4) === b.slice(0, 4)) return `${monthName(a)}–${monthName(b)} ${a.slice(0, 4)}`;
+  return `${monthName(a).slice(0, 3)} ${a.slice(0, 4)} – ${monthName(b).slice(0, 3)} ${b.slice(0, 4)}`;
+}
+
 export function buildView(ctx: Ctx, f: Filters): View {
-  const months = f.month === 'both' ? ctx.months : ctx.months.filter((m) => m === f.month);
+  const r = f.range ?? { from: null, to: null };
+  const inRange = (d: string) => (!r.from || d >= r.from) && (!r.to || d <= r.to);
+  // a month is in view when its comparison window overlaps the chosen range
+  const months = ctx.months.filter((m) => (!r.from || ctx.wins[m].to >= r.from) && (!r.to || ctx.wins[m].from <= r.to));
+  const [cm1, cm2] = cmpPair(months);
   const dealerKeys = f.dealers.length ? ctx.dealers.filter((d) => f.dealers.includes(d.key)).map((d) => d.key) : ctx.dealers.map((d) => d.key);
   const dset = new Set(dealerKeys);
   const modelsOn = f.models.length > 0;
-  const aAll = appOrders(ctx, modelsOn ? f.models : null).filter((o) => dset.has(o.dealer));
-  const dAll = dsOrders(ctx).filter((o) => dset.has(o.dealer));
+  const aFull = appOrders(ctx, modelsOn ? f.models : null).filter((o) => dset.has(o.dealer));
+  const aAll = aFull.filter((o) => inRange(o.date));
+  const dAll = dsOrders(ctx).filter((o) => dset.has(o.dealer) && inRange(o.date));
   const dDup = dAll.filter((o) => o.dup);
   const dKeep = dAll.filter((o) => !o.dup);
   const inM = (o: Ord) => months.includes(o.month);
@@ -338,9 +382,9 @@ export function buildView(ctx: Ctx, f: Filters): View {
     const dMo = Object.fromEntries(ctx.months.map((m) => [m, agg(dKeep.filter((o) => o.dealer === d.key && o.month === m))])) as Record<string, Agg>;
     const app = agg(ao);
     const ds = agg(dso);
-    const m1 = ctx.months[0];
-    const m2 = ctx.months[ctx.months.length - 1];
-    const both = ctx.months.length > 1;
+    const m1 = cm1;
+    const m2 = cm2;
+    const both = months.length > 1;
     const appChange = both ? aMo[m2].valid - aMo[m1].valid : null;
     const mTop = new Map<string, number>();
     ao.filter((o) => o.status === 'valid').forEach((o) => o.lines.forEach((l) => mTop.set(modelOf(l), (mTop.get(modelOf(l)) ?? 0) + (l.amount ?? 0))));
@@ -477,11 +521,11 @@ export function buildView(ctx: Ctx, f: Filters): View {
   const appRejByModel = [...rejMap.entries()].map(([model, v]) => ({ model, ...v })).sort((a, b) => b.orders - a.orders);
 
   const wl = months.map((m) => ctx.wins[m]);
-  const daysLabel = wl.map((w) => `${w.label}${''}`).join(' and ');
-  const periodLabel = f.month === 'both' ? `${monthName(ctx.months[0])}–${monthName(ctx.months[ctx.months.length - 1])} 2026` : `${monthName(f.month)} 2026`;
+  const daysLabel = wl.map((w) => w.label).join(' and ');
+  const periodLabel = months.length ? monthSpan(months[0], months[months.length - 1]) : 'no months in the chosen range';
   return {
     ctx, f, months, both: months.length > 1, dealerKeys, show: { app: f.channel !== 'ds', ds: f.channel !== 'app' }, dsAvailable: !modelsOn,
-    app: agg(aSel), ds: agg(dSel), appM, dsM, dsDupCount: dDup.filter(inM).length, rows, models, skus, mbd, mbdDealer, trend: buildTrend(ctx, dealerKeys, aAll), appRejByModel,
+    app: agg(aSel), ds: agg(dSel), appM, dsM, dsDupCount: dDup.filter(inM).length, rows, models, skus, mbd, mbdDealer, trend: buildTrend(ctx, dealerKeys, aFull), cmp: [cm1, cm2], appRejByModel,
     appOrders: aSel, dsOrders: dSel, dsPossibleDup: dSel.filter((o) => o.flags.includes('possible_duplicate')).length, daysLabel, periodLabel,
   };
 }

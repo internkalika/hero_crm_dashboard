@@ -8,7 +8,7 @@ import { useAdmin } from '../state/AdminContext';
 import { AdminLogin } from '../components/AdminLogin';
 import { SOURCES, SOURCE_TYPES } from '../lib/ingest/sources';
 import type { SourceType } from '../lib/types';
-import { ImportItem, commitItems, itemsFromAnalyses, effectiveMapping, missingForItem, normalizeItem, planItems, sheetColumns, batchConflicts, CommitResult } from '../lib/ingest/session';
+import { ImportItem, commitItems, expandMonths, itemsFromAnalyses, effectiveMapping, missingForItem, normalizeItem, planItems, sheetColumns, batchConflicts, CommitResult } from '../lib/ingest/session';
 import type { Mode } from '../lib/ingest/pipeline';
 import { fDate, fInt } from '../lib/export/format';
 import { Catalogue } from './import/Catalogue';
@@ -114,7 +114,7 @@ function ImportWizard() {
         if (it.include && it.source && !it.payload) out.push(await normalizeItem(client(), it));
         else out.push(it);
       }
-      setItems(planItems(data.datasets, out));
+      setItems(planItems(data.datasets, expandMonths(out)));
     } finally {
       setBusy(null);
     }
@@ -129,7 +129,7 @@ function ImportWizard() {
     try {
       const cur = items.find((i) => i.analysis.id === id)!;
       const next = await normalizeItem(client(), { ...cur, ...p, payload: undefined, plan: undefined });
-      setItems((all) => planItems(data.datasets, all.map((i) => (i.analysis.id === id ? next : i))));
+      setItems((all) => planItems(data.datasets, expandMonths(all.map((i) => (i.analysis.id === id ? next : i)))));
     } finally {
       setBusy(null);
     }
@@ -200,7 +200,7 @@ function ImportWizard() {
               onDragOver={(e) => (e.preventDefault(), setDragging(true))}
               onDragLeave={() => setDragging(false)}
               onDrop={drop}
-              className={clsx('flex flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors', dragging ? 'border-hero-600 bg-hero-50' : 'border-slate-300 bg-white')}
+              className={clsx('flex flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors', dragging ? 'border-hero-600 bg-hero-50' : 'border-slate-300 bg-surface')}
             >
               <UploadCloud size={36} className="text-ink-3" />
               <div className="text-base font-semibold">Drop files, a folder or a ZIP here</div>
@@ -220,7 +220,7 @@ function ImportWizard() {
         return (
           <div className="space-y-3">
             <p className="text-sm text-ink-2">Each file is recognised from its columns, then its name. Check the guess and change it if needed; untick files you do not want to import.</p>
-            <div className="overflow-auto rounded border border-slate-200 bg-white">
+            <div className="overflow-auto rounded border border-slate-200 bg-surface">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-ink-2">
                   <tr>
@@ -298,7 +298,7 @@ function ImportWizard() {
         return (
           <div className="space-y-3">
             {busy === 'validate' && <Spinner label="Reading and validating" />}
-            <div className="overflow-auto rounded border border-slate-200 bg-white">
+            <div className="overflow-auto rounded border border-slate-200 bg-surface">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-ink-2">
                   <tr>
@@ -449,7 +449,7 @@ function ImportWizard() {
           <div className="space-y-3">
             {result && result.failed.length === 0 && <Notice tone="good" title="Import complete">Dashboards now use the new data.</Notice>}
             {result && result.failed.length > 0 && <Notice tone="bad" title={`${result.failed.length} file${result.failed.length === 1 ? '' : 's'} failed`}>{result.failed.map((f) => `${f.fileName}: ${f.message}`).join('; ')}. The other files were saved.</Notice>}
-            <div className="overflow-auto rounded border border-slate-200 bg-white">
+            <div className="overflow-auto rounded border border-slate-200 bg-surface">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-ink-2"><tr><th className="px-3 py-2 text-left">File</th><th className="px-3 py-2 text-left">Action</th><th className="px-3 py-2 text-right">Added</th><th className="px-3 py-2 text-right">Updated</th><th className="px-3 py-2 text-right">Unchanged</th><th className="px-3 py-2 text-right">Replaced (removed)</th><th className="px-3 py-2 text-right">Skipped rows</th><th className="px-3 py-2 text-right">Flagged</th></tr></thead>
                 <tbody>

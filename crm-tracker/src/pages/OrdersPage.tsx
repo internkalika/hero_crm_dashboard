@@ -40,7 +40,7 @@ const BANDS: Array<{ key: string; label: string; min: number; max: number }> = [
 const bandOf = (v: number | null) => (v === null ? null : BANDS.find((b) => v >= b.min && v < b.max)?.key ?? null);
 
 function OrdersPage({ system }: { system: Sys }) {
-  const { data, period, settings } = useData();
+  const { data, period, settings, focusMonth } = useData();
   const cf = useCrossFilter();
   const { open: openProfile } = useDealerProfile();
   const [tabRaw, setTab] = useUrlValue('tab', 'trends');
@@ -73,7 +73,6 @@ function OrdersPage({ system }: { system: Sys }) {
     const f = cf.filters;
     const passing = orders.filter((o) => {
       if (!cf.ok('status', o.statusGroup)) return false;
-      if (!cf.ok('month', o.month)) return false;
       if (!cf.ok('dealer', dealerKeyOf(o))) return false;
       if (!cf.ok('db', o.dealerKey)) return false;
       if (!cf.ok('outlet', o.outletId)) return false;
@@ -104,7 +103,6 @@ function OrdersPage({ system }: { system: Sys }) {
     const nice = (k: string) => titleCase(k.toLowerCase());
     return [
       { dim: 'status', label: 'Status', allLabel: 'All statuses', options: buildOptions(orders, (o) => o.statusGroup, { label: (k) => STATUS_LABELS[k as OrderStatusGroup] ?? k }) },
-      { dim: 'month', label: 'Month', allLabel: 'All months', options: buildOptions(orders, (o) => o.month, { sort: 'value', label: (k) => monthKeyLabel(k) }) },
       { dim: 'region', label: isDealer ? 'Zone' : 'City', allLabel: isDealer ? 'All zones' : 'All cities', search: !isDealer, options: buildOptions(orders, (o) => (isDealer ? o.zone : o.city) ?? NOT_SPECIFIED, { label: nice }) },
       ...(isDealer
         ? [{ dim: 'city', label: 'City', allLabel: 'All cities', search: true, options: buildOptions(orders, (o) => o.city ?? NOT_SPECIFIED, { label: nice }) } as FilterField]
@@ -286,8 +284,8 @@ function OrdersPage({ system }: { system: Sys }) {
 
         {tab === 'trends' && (
           <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title="Order value by month" subtitle="Click a month to filter." info={{ formula: 'Σ order value by order-date month' }} table={{ columns: [{ header: 'Month' }, { header: 'Orders', format: 'int' }, { header: 'Order value', format: 'inr' }], rows: byMonth.map((m) => [monthKeyLabel(m.month), m.k.eligible, m.k.eligibleValue]) }}>
-              <BarsChart layout="vertical" format="inr" color={color} seriesName="Order value" activeKey={cf.filters.month} onSelect={(key, lab) => cf.toggle('month', key, lab)} data={byMonth.map((m) => ({ key: m.month, label: monthKeyLabel(m.month), value: m.k.eligibleValue }))} />
+            <ChartCard title="Order value by month" subtitle="Click a month to focus the reporting range on it." info={{ formula: 'Σ order value by order-date month' }} table={{ columns: [{ header: 'Month' }, { header: 'Orders', format: 'int' }, { header: 'Order value', format: 'inr' }], rows: byMonth.map((m) => [monthKeyLabel(m.month), m.k.eligible, m.k.eligibleValue]) }}>
+              <BarsChart layout="vertical" format="inr" color={color} seriesName="Order value" onSelect={(key, lab) => focusMonth(key)} data={byMonth.map((m) => ({ key: m.month, label: monthKeyLabel(m.month), value: m.k.eligibleValue }))} />
             </ChartCard>
             <ChartCard title="Orders by status" subtitle="All valid orders, rejected included. Click a status to filter." table={{ columns: [{ header: 'Status' }, { header: 'Orders', format: 'int' }], rows: statusRows.map(([s, n]) => [STATUS_LABELS[s], n]) }}>
               <DonutChart centerValue={fInt(filtered.length)} centerLabel="orders" activeKey={cf.filters.status} onSelect={(key, lab) => cf.toggle('status', key, lab)} data={statusRows.map(([s, n], i) => ({ key: s, label: STATUS_LABELS[s], value: n, color: statusColor(STATUS_LABELS[s], i) }))} />
@@ -300,7 +298,7 @@ function OrdersPage({ system }: { system: Sys }) {
                     { key: 'fulfilled', label: 'Fulfilled units', color: '#1baf7a' },
                     { key: 'pending', label: 'Not fulfilled units', color: '#eda100' },
                   ]}
-                  onSelect={(_s, key, lab) => cf.toggle('month', key, lab)}
+                  onSelect={(_s, key, lab) => focusMonth(key)}
                 />
               </ChartCard>
             ) : (

@@ -213,7 +213,7 @@ export default function GrowthComparison() {
 
       <nav aria-label="Sections of this page" className="no-print mb-3 flex flex-wrap gap-1.5 text-xs">
         {SECTIONS.map(([id, label]) => (
-          <button key={id} type="button" onClick={() => jump(id)} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-medium text-ink-2 hover:border-hero-600 hover:text-hero-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
+          <button key={id} type="button" onClick={() => jump(id)} className="rounded-full border border-slate-300 bg-surface px-2.5 py-1 font-medium text-ink-2 hover:border-hero-600 hover:text-hero-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
             {label}
           </button>
         ))}

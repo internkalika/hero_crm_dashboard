@@ -30,7 +30,7 @@ export function ActionChips({ items, onGo }: { items: BriefAction[]; onGo: (to: 
             onClick={() => onGo(a.to)}
             title={`${PRIORITY[a.priority]}: ${a.why}`}
             aria-label={`${PRIORITY[a.priority]}: ${a.title}. ${a.why}`}
-            className={clsx('group inline-flex max-w-full items-center gap-2 rounded-full border bg-white py-1 pl-1.5 pr-3 text-left text-xs font-medium text-ink shadow-card transition-all hover:-translate-y-0.5 hover:border-hero-600 hover:shadow-pop focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600', a.priority === 1 ? 'border-hero-200' : 'border-slate-300')}
+            className={clsx('group inline-flex max-w-full items-center gap-2 rounded-full border bg-surface py-1 pl-1.5 pr-3 text-left text-xs font-medium text-ink shadow-card transition-all hover:-translate-y-0.5 hover:border-hero-600 hover:shadow-pop focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600', a.priority === 1 ? 'border-hero-200' : 'border-slate-300')}
           >
             <span className={clsx('flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold', a.priority === 1 ? 'bg-hero-600 text-white' : 'bg-slate-100 text-ink-2')} aria-hidden>
               {n + 1}

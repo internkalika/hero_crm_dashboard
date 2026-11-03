@@ -56,7 +56,7 @@ function PeriodSelect({ label, value, options, min, max, onChange }: { label: st
   );
 }
 
-const Chip = ({ children, strong }: { children: ReactNode; strong?: boolean }) => <span className={`rounded-full px-2 py-0.5 text-[11px] ${strong ? 'bg-ink font-semibold text-white' : 'bg-slate-100 font-medium text-ink-2'}`}>{children}</span>;
+const Chip = ({ children, strong }: { children: ReactNode; strong?: boolean }) => <span className={`rounded-full px-2 py-0.5 text-[11px] ${strong ? 'bg-ink font-semibold text-surface' : 'bg-slate-100 font-medium text-ink-2'}`}>{children}</span>;
 
 export function Controls({
   span,

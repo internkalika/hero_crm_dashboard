@@ -4,6 +4,82 @@
 
 :root {
   color-scheme: light;
+  --surface: 255 255 255;
+  --surface-2: 245 246 248;
+  --ink: 41 41 41;
+  --ink-2: 82 81 78;
+  --ink-3: 137 135 129;
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --hero-50: 253 241 242;
+  --hero-100: 251 227 229;
+  --hero-200: 245 191 196;
+  --hero-600: 200 32 47;
+  --hero-700: 168 26 39;
+  --hero-800: 138 21 32;
+  --good-text: 0 99 0;
+  --good-soft: 232 246 232;
+  --warn-text: 138 90 0;
+  --warn-soft: 255 244 219;
+  --bad-text: 176 42 42;
+  --bad-soft: 252 234 234;
+  --info-soft: 232 241 252;
+  --teal-soft: 227 244 245;
+  --shadow-card: 0 1px 2px rgba(41, 41, 41, 0.06), 0 1px 3px rgba(41, 41, 41, 0.05);
+  --shadow-pop: 0 8px 24px rgba(41, 41, 41, 0.14);
+  /* chart furniture */
+  --chart-text: #52514e;
+  --chart-grid: #e6e5e1;
+  --chart-axis: #c9c7c1;
+  --chart-gap: #ffffff;
+}
+
+/* Dark theme: charcoal surfaces, light text, the same Hero red (a little brighter so it keeps its contrast). Toggled with the "dark" class on <html>. */
+html.dark {
+  color-scheme: dark;
+  --surface: 33 36 42;
+  --surface-2: 21 23 27;
+  --ink: 238 238 236;
+  --ink-2: 190 192 197;
+  --ink-3: 146 150 158;
+  --slate-50: 40 43 50;
+  --slate-100: 46 50 58;
+  --slate-200: 62 67 76;
+  --slate-300: 82 88 99;
+  --slate-400: 128 135 147;
+  --slate-500: 156 163 174;
+  --slate-600: 182 188 198;
+  --slate-700: 206 211 218;
+  --slate-800: 226 230 235;
+  --slate-900: 241 243 246;
+  --hero-50: 54 26 30;
+  --hero-100: 72 32 38;
+  --hero-200: 108 44 52;
+  --hero-600: 214 44 58;
+  --hero-700: 242 100 112;
+  --hero-800: 250 142 150;
+  --good-text: 112 214 126;
+  --good-soft: 24 54 30;
+  --warn-text: 246 192 84;
+  --warn-soft: 64 50 20;
+  --bad-text: 255 132 132;
+  --bad-soft: 68 30 32;
+  --info-soft: 26 46 74;
+  --teal-soft: 22 56 60;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --chart-text: #bec0c5;
+  --chart-grid: #373b44;
+  --chart-axis: #565c68;
+  --chart-gap: #21242a;
 }
 
 html,
@@ -24,7 +100,7 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
     @apply border-hero-600 bg-hero-600 text-white hover:bg-hero-700;
@@ -39,10 +115,10 @@ body {
     @apply px-2 py-1 text-xs;
   }
   .card {
-    @apply rounded-lg border border-slate-200 bg-white shadow-card;
+    @apply rounded-lg border border-slate-200 bg-surface shadow-card;
   }
   .input {
-    @apply rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:border-hero-600 focus:outline-none focus:ring-1 focus:ring-hero-600;
+    @apply rounded-md border border-slate-300 bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:border-hero-600 focus:outline-none focus:ring-1 focus:ring-hero-600;
   }
   .label {
     @apply text-xs font-medium uppercase tracking-wide text-ink-3;
@@ -51,14 +127,14 @@ body {
 
 /* Recharts: keep axis text in ink tokens, grid recessive */
 .recharts-cartesian-axis-tick-value {
-  fill: #52514e;
+  fill: var(--chart-text);
   font-size: 11px;
 }
 .recharts-cartesian-grid line {
-  stroke: #e6e5e1;
+  stroke: var(--chart-grid);
 }
 .recharts-text.recharts-label {
-  fill: #52514e;
+  fill: var(--chart-text);
 }
 .recharts-surface:focus,
 .recharts-wrapper:focus {
@@ -70,3 +146,20 @@ body {
     display: none !important;
   }
 }
+
+/* charts set a few neutral colours inline; map them to the theme */
+[fill='#52514e'] { fill: var(--chart-text); }
+[stroke='#c9c7c1'] { stroke: var(--chart-axis); }
+[stroke='#fff'], [stroke='#ffffff'] { stroke: var(--chart-gap); }
+.recharts-legend-item-text, .recharts-legend-wrapper { color: var(--chart-text) !important; }
+.recharts-default-tooltip { background-color: rgb(var(--surface)) !important; border-color: rgb(var(--slate-200)) !important; color: rgb(var(--ink)) !important; }
+.recharts-tooltip-label { color: rgb(var(--ink)) !important; }
+.recharts-tooltip-cursor { fill: rgb(var(--slate-100)); fill-opacity: 0.5; }
+::selection { background: rgb(var(--hero-200)); }
+
+/* the supplied logo is a picture on an off-white box: keep it on a light chip in the dark theme */
+html.dark .logo-chip { background-color: #f5f6f8; }
+html.dark .bg-sky-100 { background-color: rgb(26 46 74); }
+html.dark .bg-emerald-100 { background-color: rgb(24 54 30); }
+html.dark .bg-amber-100 { background-color: rgb(64 50 20); }
+html.dark .\!bg-amber-50 { background-color: rgb(54 42 16) !important; }

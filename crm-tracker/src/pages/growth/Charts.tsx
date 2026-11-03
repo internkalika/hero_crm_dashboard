@@ -111,7 +111,7 @@ export function ChannelCharts({ m, onMonth, onChannel }: { m: GrowthModel; onMon
         </div>
       </ChartCard>
       <div className="lg:col-span-2">
-        <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-hero-700 hover:border-hero-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
+        <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-surface px-3 py-1 text-xs font-semibold text-hero-700 hover:border-hero-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600">
           {more ? 'Fewer charts' : 'More charts: quantity, selling price, complaints, rejections'} <ChevronDown size={12} className={clsx('transition-transform', more && 'rotate-180')} aria-hidden />
         </button>
       </div>

@@ -28,7 +28,7 @@ export function DownloadMenu({ items, label = 'Download', disabled }: { items: D
         <Download size={16} />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-pop">
+        <div role="menu" className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-200 bg-surface p-1 text-xs shadow-pop">
           {items.map((it) => (
             <button
               key={it.label}

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const src = (p: string) => path.resolve(__dirname, p);
@@ -14,7 +15,19 @@ export default defineConfig(({ mode }) => {
   const single = mode === 'single';
   const embed = single || mode === 'vercel';
   return {
-    plugins: [react(), ...(single ? [viteSingleFile()] : [])],
+    plugins: [
+      react(),
+      ...(single
+        ? [
+            viteSingleFile(),
+            {
+              // a file:// page cannot load /theme-init.js, and the CSP of the hosted builds forbids inline scripts: inline it only here
+              name: 'inline-theme-init',
+              transformIndexHtml: (html: string) => html.replace('<script src="/theme-init.js"></script>', `<script>${fs.readFileSync(src('public/theme-init.js'), 'utf8')}</script>`),
+            },
+          ]
+        : []),
+    ],
     resolve: {
       alias: [
         { find: /^@snapshot$/, replacement: src(embed ? 'src/generated/snapshot.data.ts' : 'src/generated/snapshot.empty.ts') },

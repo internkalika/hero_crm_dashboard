@@ -150,7 +150,7 @@ export function useCrossFilter(): CrossFilter {
 /** The chips of the active filters: one per selected value (a long selection is summarised), each removable. */
 export function FilterChips({ cf, dimLabels = {}, className = 'mb-3' }: { cf: CrossFilter; dimLabels?: Record<string, string>; className?: string }) {
   if (cf.count === 0) return null;
-  const chip = 'inline-flex max-w-full items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-xs font-medium text-white hover:bg-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 focus-visible:ring-offset-1';
+  const chip = 'inline-flex max-w-full items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-xs font-medium text-surface hover:bg-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-600 focus-visible:ring-offset-1';
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`} aria-label="Active filters">
       <span className="label">Filtered by</span>

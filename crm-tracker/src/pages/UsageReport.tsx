@@ -5,8 +5,10 @@ import { useDealerProfile } from '@/components/filters';
 import { DataTable } from '@/components/DataTable';
 import { PageHeader, InfoTip, Segmented } from '@/components/ui';
 import { DataGate } from '@/components/States';
+import { dateInPeriod } from '@/lib/metrics/period';
+import { rangeLabel } from '@/components/DateRangePicker';
 import type { DsUsageAsmRow, DsUsageRec, DsUsageReported } from '@/lib/types';
-// DataSense SFA: Usage Report (App Usage Report, April-October). Orders recorded per platform, NOT report accesses.
+// DataSense SFA: Usage Report (App Usage Report; the months come from the data). Orders recorded per platform, NOT report accesses.
 import { Pick, Section, Seg, Tile } from './Landing';
 import { inr, int, pct } from '@/lib/metrics/landing';
 
@@ -87,16 +89,17 @@ function K(rows: Row[]) {
 }
 
 function Body({ d }: { d: UsageView }) {
+  const { period } = useData();
   const rows: Row[] = d.rows;
   const months: string[] = useMemo(() => [...new Set<string>(rows.map((r) => r.month))].sort(), [rows]);
-  const [f, setF] = useState({ month: 'all', zones: [] as string[], platforms: [] as string[], roles: [] as string[] });
-  const sub = useMemo(() => rows.filter((r) => (f.month === 'all' || r.month === f.month) && (!f.zones.length || f.zones.includes(r.zone)) && (!f.platforms.length || f.platforms.includes(r.platform)) && (!f.roles.length || f.roles.includes(r.role))), [rows, f]);
+  const [f, setF] = useState({ zones: [] as string[], platforms: [] as string[], roles: [] as string[] });
+  const sub = useMemo(() => rows.filter((r) => dateInPeriod(r.date, period) && (!f.zones.length || f.zones.includes(r.zone)) && (!f.platforms.length || f.platforms.includes(r.platform)) && (!f.roles.length || f.roles.includes(r.role))), [rows, f, period]);
   const k = K(sub);
   const kAll = K(rows);
   const opts = (key: keyof Row) => [...new Set<string>(rows.map((r) => String(r[key])))].sort().map((v) => ({ value: v, label: v }));
   const trendRows = rows.filter((r) => (!f.zones.length || f.zones.includes(r.zone)) && (!f.platforms.length || f.platforms.includes(r.platform)) && (!f.roles.length || f.roles.includes(r.role)));
   const plats = ['Mobile', 'Web', 'Old App'];
-  const monthly = months.map((m) => { const rs = trendRows.filter((r) => r.month === m); const o: any = { key: m, label: mlab(m).slice(0, 3) }; plats.forEach((p) => (o[p] = rs.filter((r) => r.platform === p).length)); o.adoption = rs.length ? rs.filter((r) => r.source === 'SFA').length / rs.length : null; o.total = rs.length; return o; });
+  const monthly = months.map((m) => { const rs = trendRows.filter((r) => r.month === m); const o: any = { key: m, label: months.some((x) => x.slice(0, 4) !== months[0].slice(0, 4)) ? mlab(m).replace(/ 20(\d\d)$/, ' $1') : mlab(m).slice(0, 3) }; plats.forEach((p) => (o[p] = rs.filter((r) => r.platform === p).length)); o.adoption = rs.length ? rs.filter((r) => r.source === 'SFA').length / rs.length : null; o.total = rs.length; return o; });
   const zones = [...new Set(sub.map((r) => r.zone))].sort().map((z) => { const rs = sub.filter((r) => r.zone === z); return { key: z, label: z, sfa: rs.filter((r) => r.source === 'SFA').length, sap: rs.filter((r) => r.source !== 'SFA').length }; });
   const statuses = Object.entries(sub.reduce((a: any, r) => ((a[r.status] = (a[r.status] ?? 0) + 1), a), {})).sort((a: any, b: any) => b[1] - a[1]).map(([s, n]: any) => ({ key: s, label: s, value: n, color: REJ.has(s) ? RED : s === 'Archived' ? GREY : BLUE }));
   const emap = new Map<string, any>();
@@ -130,13 +133,13 @@ function Body({ d }: { d: UsageView }) {
     h('div', { className: 'lp-scope' },
       h('span', { className: 'lp-chip red' }, d.period), h('span', { className: 'lp-chip' }, `Source: ${d.file}`), d.reported?.['Generated on'] && h('span', { className: 'lp-chip' }, `Generated ${d.reported['Generated on']}`),
       h('span', { className: 'lp-chip' }, 'Counts are orders recorded per platform, not report accesses, downloads or successful transactions')),
+    sub.length === 0 && h('div', { className: 'lp-note' }, 'No Usage Report orders fall inside the chosen date range (or inside the zone, platform and role filters). Widen or reset them.'),
     h('div', { className: 'lp-filters' },
-      h(Seg, { label: 'Month', value: f.month, onChange: (x: string) => setF({ ...f, month: x }), options: [{ value: 'all', label: 'All' }, ...months.map((m) => ({ value: m, label: mlab(m).slice(0, 3) }))] }),
       h(Pick, { label: 'Zone', all: 'All zones', value: f.zones, onChange: (x: string[]) => setF({ ...f, zones: x }), options: opts('zone') }),
       h(Pick, { label: 'Platform', all: 'All platforms', value: f.platforms, onChange: (x: string[]) => setF({ ...f, platforms: x }), options: opts('platform') }),
       h(Pick, { label: 'Punched by', all: 'All roles', value: f.roles, onChange: (x: string[]) => setF({ ...f, roles: x }), options: opts('role') }),
-      (f.month !== 'all' || f.zones.length > 0 || f.platforms.length > 0 || f.roles.length > 0) && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ month: 'all', zones: [], platforms: [], roles: [] }) }, 'Reset filters')),
-    h(Section, { id: 'us-k', title: 'Usage summary', sub: f.month === 'all' ? d.period : mlab(f.month) },
+      (f.zones.length > 0 || f.platforms.length > 0 || f.roles.length > 0) && h('button', { type: 'button', className: 'lp-reset', onClick: () => setF({ zones: [], platforms: [], roles: [] }) }, 'Reset filters')),
+    h(Section, { id: 'us-k', title: 'Usage summary', sub: period.from && period.to ? rangeLabel({ from: period.from, to: period.to }, null, null) : d.period },
       h('div', { className: 'lp-tiles4' },
         h(Tile, { l: 'Orders recorded', v: int(k.total), s: 'One row per order in the report' }),
         h(Tile, { l: 'SFA app orders', v: int(k.sfa), s: `${pct(k.adoption)} of orders · Mobile + Web` }),
@@ -146,7 +149,7 @@ function Body({ d }: { d: UsageView }) {
         h(Tile, { l: 'Valid SFA orders', v: int(k.validSfa), s: `${pct(k.net ? k.validSfa / k.net : null)} of net valid orders` }),
         h(Tile, { l: 'SFA rejection rate', v: pct(k.sfaRejRate), s: `${int(k.sfaRej)} of ${int(k.sfa)} SFA orders (rejected by ASM / SAP or SAP order not created)`, tone: 'bad' }),
         h(Tile, { l: 'Orders without a value', v: int(k.noValue), s: `The file gives no value for these${d.mostlyArchivedNoValue ? ' (mostly archived)' : ''}; they are not treated as zero` }))),
-    h(Section, { id: 'us-t', title: `${d.periodShort} trend`, sub: 'Month filter does not apply here; zone, platform and role filters do.' },
+    h(Section, { id: 'us-t', title: `${d.periodShort} trend`, sub: 'The reporting range does not narrow this trend (every month stays visible); zone, platform and role filters do.' },
       h('div', { className: 'lp-grid2' },
         h(ChartCard, { title: 'Orders by platform and month', table: { columns: [{ header: 'Month' }, ...plats.map((p) => ({ header: p, format: 'int' }))], rows: monthly.map((m: any) => [m.label, ...plats.map((p) => m[p])]) } },
           h(StackedBarsChart, { data: monthly, series: [{ key: 'Mobile', label: 'Mobile (SFA)', color: RED }, { key: 'Web', label: 'Web (SFA)', color: BLUE }, { key: 'Old App', label: 'Old App (SAP)', color: GREY }], format: 'int', height: 260 })),
